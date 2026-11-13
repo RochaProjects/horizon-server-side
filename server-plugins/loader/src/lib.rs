@@ -516,7 +516,10 @@ fn valid_item_id(item: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b"_:/.-".contains(&b))
 }
 
-fn host_api(host: &mut dyn Host, balances: &mut BalanceStore) -> (HostApiV2, HostBridge<'_>) {
+fn host_api<'a>(
+    host: &'a mut dyn Host,
+    balances: &'a mut BalanceStore,
+) -> (HostApiV2, HostBridge<'a>) {
     (
         HostApiV2 {
             abi_version: ABI_VERSION,
