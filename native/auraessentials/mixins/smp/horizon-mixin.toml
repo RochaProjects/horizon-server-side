@@ -1,0 +1,545 @@
+[mod]
+id = "aura_essentials"
+version = "0.1.0"
+priority = 100
+
+# The commit of horizon CI tests it on (the minimap's: mods on the newest hooks share one; the official server's
+# engine, r9.1 52882c1, descends from it with the same hooks): it needs the projectile impact,
+# hanging break, entity join and dispenser hooks (API 359), the entity handles and native_player_chat (in its source,
+# stamped later on main as API 399), on top of native_hide_player (API 314) and horizon#6106's helpers;
+# native_explosion_entities (horizon#15529) is in its source too, its number stamped later.
+[compatibility]
+horizon_revision = "ac2603ed41953f1b8b791ca8396a0eb5147baea7"
+
+[[module]]
+id = "store"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_store"
+source = "smp_store.rs"
+
+[[module]]
+id = "economy"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_economy"
+source = "smp_economy.rs"
+
+[[module]]
+id = "market"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_market"
+source = "smp_market.rs"
+
+[[module]]
+id = "market_prices"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_market_prices"
+source = "smp_market_prices.rs"
+
+[[module]]
+id = "market_chart"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_market_chart"
+source = "smp_market_chart.rs"
+
+[[module]]
+id = "market_menu"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_market_menu"
+source = "smp_market_menu.rs"
+
+[[module]]
+id = "recipes"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_recipes"
+source = "smp_recipes.rs"
+
+[[module]]
+id = "shop"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_shop"
+source = "smp_shop.rs"
+
+[[module]]
+id = "report"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_report"
+source = "smp_report.rs"
+
+[[module]]
+id = "admin"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_admin"
+source = "smp_admin.rs"
+
+[[module]]
+id = "auction"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_auction"
+source = "smp_auction.rs"
+
+[[module]]
+id = "trade"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_trade"
+source = "smp_trade.rs"
+
+[[module]]
+id = "vanish"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_vanish"
+source = "smp_vanish.rs"
+
+[[module]]
+id = "games"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_games"
+source = "smp_games.rs"
+
+[[module]]
+id = "lottery"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_lottery"
+source = "smp_lottery.rs"
+
+[[module]]
+id = "casino"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino"
+source = "smp_casino.rs"
+
+[[module]]
+id = "casino_roulette"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino_roulette"
+source = "smp_casino_roulette.rs"
+
+[[module]]
+id = "casino_slots"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino_slots"
+source = "smp_casino_slots.rs"
+
+[[module]]
+id = "casino_crash"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino_crash"
+source = "smp_casino_crash.rs"
+
+[[module]]
+id = "casino_blackjack"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino_blackjack"
+source = "smp_casino_blackjack.rs"
+
+[[module]]
+id = "casino_glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_casino_glue"
+source = "casino_glue.rs"
+
+[[module]]
+id = "nick"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_nick"
+source = "smp_nick.rs"
+
+[[module]]
+id = "places"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_places"
+source = "smp_places.rs"
+
+[[module]]
+id = "board"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_board"
+source = "smp_board.rs"
+
+[[module]]
+id = "presence"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_presence"
+source = "smp_presence.rs"
+
+[[module]]
+id = "claims"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_claims"
+source = "smp_claims.rs"
+
+[[module]]
+id = "invsee"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_invsee"
+source = "smp_invsee.rs"
+
+[[module]]
+id = "invsee_glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_invsee_glue"
+source = "invsee_glue.rs"
+
+[[module]]
+id = "reports"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_reports"
+source = "smp_reports.rs"
+
+[[module]]
+id = "ledger"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_ledger"
+source = "smp_ledger.rs"
+
+[[module]]
+id = "switch"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_switch"
+source = "smp_switch.rs"
+
+[[module]]
+id = "glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_glue"
+source = "glue.rs"
+
+[[module]]
+id = "claims_glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_claims_glue"
+source = "claims_glue.rs"
+
+[[module]]
+id = "ping"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_ping"
+source = "smp_ping.rs"
+
+[[module]]
+id = "ping_glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_ping_glue"
+source = "ping_glue.rs"
+
+# The chat queue sits in the client library: the hub hears chat there.
+[[module]]
+id = "chat"
+file = "crates/horizon-client/src/client_lib.rs"
+name = "smp_chat"
+source = "smp_chat.rs"
+visibility = "pub"
+
+[[injection]]
+id = "register"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_register_commands"
+helper = "register.rs"
+bindings = [
+  { name = "commands", ty = "&mut Vec<crate::game::native_server::NativeCommand>", value = "&mut *commands" },
+]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_perform_command"
+helper = "command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "&crate::game::native_server::NativeServerPlayer", value = "player" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_server_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "phase", ty = "crate::game::native_lifecycle::ServerTickPhase", value = "phase" },
+]
+
+[[injection]]
+id = "level_tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_level_tick_post"
+helper = "level_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+]
+
+[[injection]]
+id = "lifecycle"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_lifecycle"
+helper = "lifecycle.rs"
+bindings = [
+  { name = "phase", ty = "crate::game::native_lifecycle::WorldPhase", value = "phase" },
+]
+
+[[injection]]
+id = "menu_clicked"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_menu_clicked"
+helper = "menu_clicked.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "uuid", ty = "u128", value = "uuid" },
+  { name = "window", ty = "i32", value = "window" },
+  { name = "slot", ty = "i32", value = "slot" },
+  { name = "mode", ty = "i32", value = "mode" },
+]
+
+[[injection]]
+id = "menu_closed"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_menu_closed"
+helper = "menu_closed.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "uuid", ty = "u128", value = "uuid" },
+  { name = "window", ty = "i32", value = "window" },
+]
+
+[[injection]]
+id = "destroy_block"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_destroy_block"
+helper = "destroy_block.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "right_click_block"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_right_click_block"
+helper = "right_click_block.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "block_spread"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::GameLevel<'_>::native_block_spread"
+helper = "block_spread.rs"
+bindings = [
+  { name = "dimension", ty = "crate::game::LevelDimension", value = "dimension" },
+  { name = "from", ty = "horizon_core::position::BlockPos", value = "from" },
+  { name = "to", ty = "horizon_core::position::BlockPos", value = "to" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "piston_move"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::GameLevel<'_>::native_piston_move"
+helper = "piston_move.rs"
+bindings = [
+  { name = "dimension", ty = "crate::game::LevelDimension", value = "dimension" },
+  { name = "piston", ty = "horizon_core::position::BlockPos", value = "piston" },
+  { name = "direction", ty = "[i32; 3]", value = "direction" },
+  { name = "push", ty = "&[horizon_core::position::BlockPos]", value = "push" },
+  { name = "destroy", ty = "&[horizon_core::position::BlockPos]", value = "destroy" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "explosion_detonate"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_explosion_detonate"
+helper = "explosion_detonate.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "center", ty = "[f64; 3]", value = "center" },
+  { name = "blocks", ty = "&mut Vec<[i32; 3]>", value = "&mut *blocks" },
+]
+
+[[injection]]
+id = "fill_bucket"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_fill_bucket"
+helper = "fill_bucket.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "attack_entity"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_attack_entity"
+helper = "attack_entity.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "use_item_on"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_use_item_on"
+helper = "use_item_on.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "face", ty = "[i32; 3]", value = "face" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "interact_entity"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_interact_entity"
+helper = "interact_entity.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "entity", ty = "i32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "claimed", ty = "&mut bool", value = "&mut *claimed" },
+]
+
+[[injection]]
+id = "dispense_item"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_dispense_item"
+helper = "dispense_item.rs"
+bindings = [
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "facing", ty = "horizon_core::geometry::Direction", value = "facing" },
+  { name = "stack", ty = "&horizon_client::items::ItemStack", value = "stack" },
+  { name = "answer", ty = "&mut Option<horizon_client::mod_api::NativeDispensed>", value = "&mut *answer" },
+]
+
+[[injection]]
+id = "block_ignite"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::GameLevel<'_>::native_block_ignite"
+helper = "block_ignite.rs"
+bindings = [
+  { name = "dimension", ty = "crate::game::LevelDimension", value = "dimension" },
+  { name = "pos", ty = "horizon_core::position::BlockPos", value = "pos" },
+  { name = "cause", ty = "&str", value = "cause" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "entity_join"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_entity_join_level"
+helper = "entity_join.rs"
+bindings = [
+  { name = "entity", ty = "u32", value = "entity" },
+  { name = "kind", ty = "&str", value = "kind" },
+  { name = "pos", ty = "[f64; 3]", value = "pos" },
+  { name = "loaded", ty = "bool", value = "loaded_from_disk" },
+]
+
+[[injection]]
+id = "hears_impacts"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hears_projectile_impacts"
+helper = "hears_impacts.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "hears", ty = "&mut bool", value = "&mut *hears" },
+]
+
+[[injection]]
+id = "projectile_impact"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_projectile_impact"
+helper = "projectile_impact.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "projectile", ty = "u32", value = "projectile" },
+  { name = "owner", ty = "u32", value = "owner" },
+  { name = "entity", ty = "Option<u32>", value = "entity" },
+  { name = "entity_kind", ty = "&str", value = "entity_kind" },
+  { name = "block", ty = "[i32; 3]", value = "block" },
+  { name = "at", ty = "[f64; 3]", value = "at" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "explosion_entities"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_explosion_entities"
+helper = "explosion_entities.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+  { name = "dimension", ty = "&str", value = "dimension" },
+  { name = "entities", ty = "&mut Vec<u32>", value = "&mut *entities" },
+]
+
+[[injection]]
+id = "hanging_break"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hanging_break"
+helper = "hanging_break.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "Option<u128>", value = "player" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "cancel", ty = "&mut bool", value = "&mut *cancel" },
+]
+
+[[injection]]
+id = "player_command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_command"
+helper = "player_command.rs"
+bindings = [
+  { name = "player", ty = "u128", value = "player" },
+  { name = "command", ty = "&str", value = "command" },
+]
+
+[[injection]]
+id = "player_chat"
+kind = "HEAD"
+target = "horizon_client_lib::lan::hub::chat::native_player_chat"
+helper = "player_chat.rs"
+bindings = [
+  { name = "player", ty = "u128", value = "player" },
+  { name = "message", ty = "&str", value = "message" },
+]
+
+[[injection]]
+id = "player_logged_out"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_logged_out"
+helper = "player_logged_out.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "name", ty = "&str", value = "name" },
+]
+
+[[injection]]
+id = "tab_complete"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tab_complete_v2"
+helper = "tab_complete.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "name", ty = "&str", value = "name" },
+  { name = "label", ty = "&str", value = "label" },
+  { name = "arguments", ty = "&[String]", value = "arguments" },
+  { name = "range", ty = "[usize; 2]", value = "range" },
+  { name = "suggestions", ty = "&mut Vec<horizon_client::mod_api::Suggestion>", value = "&mut *suggestions" },
+]
