@@ -101,7 +101,14 @@ pub struct LevelShapes {
     pub nether: LevelShape,
     pub end: LevelShape,
     custom: Option<std::sync::Arc<std::collections::HashMap<horizon_core::LevelKey, LevelShape>>>,
-    custom_facts: Option<std::sync::Arc<std::collections::HashMap<horizon_core::LevelKey, horizon_world::dimension_type::DimensionFacts>>>,
+    custom_facts: Option<
+        std::sync::Arc<
+            std::collections::HashMap<
+                horizon_core::LevelKey,
+                horizon_world::dimension_type::DimensionFacts,
+            >,
+        >,
+    >,
 }
 impl LevelShapes {
     pub const VANILLA: Self = Self {
@@ -148,7 +155,10 @@ impl LevelShapes {
         std::sync::Arc::make_mut(self.custom_facts.get_or_insert_with(Default::default))
             .insert(key, facts);
     }
-    pub fn dimension_facts(&self, id: &str) -> Option<&horizon_world::dimension_type::DimensionFacts> {
+    pub fn dimension_facts(
+        &self,
+        id: &str,
+    ) -> Option<&horizon_world::dimension_type::DimensionFacts> {
         let key = horizon_core::LevelKey::parse(id).ok()?;
         self.custom_facts.as_ref()?.get(&key)
     }

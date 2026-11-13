@@ -41,7 +41,8 @@ impl Game<'_> {
         if level.dimension() == self.dim.id() {
             self.ui.rules.get(r.name)
         } else {
-            self.effective_rules_for_dimension(level.dimension()).get(r.name)
+            self.effective_rules_for_dimension(level.dimension())
+                .get(r.name)
         }
     }
     /// The rain and thunder levels, each 0.0 to 1.0 (`Level.getRainLevel`,
@@ -90,7 +91,8 @@ impl Game<'_> {
         let Some(rule) = gamerules::rule(rule) else {
             return false;
         };
-        if self.native_level_world(level).is_none() || !self.ui.global_rules.clone().set(rule.name, value)
+        if self.native_level_world(level).is_none()
+            || !self.ui.global_rules.clone().set(rule.name, value)
         {
             return false;
         }
@@ -98,41 +100,87 @@ impl Game<'_> {
         true
     }
     /// Reads a custom dimension's effective rule without making it active.
-    pub(super) fn native_dimension_game_rule(&self, dimension: &str, rule: &str) -> Option<GameRuleValue> {
-        if !self.native_custom_dimension_dir(dimension).is_some_and(|p| p.is_dir()) {
+    pub(super) fn native_dimension_game_rule(
+        &self,
+        dimension: &str,
+        rule: &str,
+    ) -> Option<GameRuleValue> {
+        if !self
+            .native_custom_dimension_dir(dimension)
+            .is_some_and(|p| p.is_dir())
+        {
             return None;
         }
         self.effective_rules_for_dimension(dimension).get(rule)
     }
-    pub(super) fn native_dimension_has_game_rule_override(&self, dimension: &str, rule: &str) -> bool {
-        let Some(rule) = gamerules::rule(rule) else { return false };
-        self.ui.dimension_rule_overrides.get(dimension).is_some_and(|values| values.contains_key(rule.name))
+    pub(super) fn native_dimension_has_game_rule_override(
+        &self,
+        dimension: &str,
+        rule: &str,
+    ) -> bool {
+        let Some(rule) = gamerules::rule(rule) else {
+            return false;
+        };
+        self.ui
+            .dimension_rule_overrides
+            .get(dimension)
+            .is_some_and(|values| values.contains_key(rule.name))
     }
     fn native_custom_dimension_dir(&self, dimension: &str) -> Option<std::path::PathBuf> {
-        if dimension.starts_with("minecraft:") { return None; }
+        if dimension.starts_with("minecraft:") {
+            return None;
+        }
         let key = horizon_core::LevelKey::parse(dimension).ok()?;
         let namespace = key.namespace();
         let path = key.path();
-        if namespace == "minecraft" || path.is_empty() || path.split('/').any(|segment| segment.is_empty() || segment == "." || segment == "..") {
+        if namespace == "minecraft"
+            || path.is_empty()
+            || path
+                .split('/')
+                .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+        {
             return None;
         }
-        Some(self.world_root.join("dimensions").join(namespace).join(path))
+        Some(
+            self.world_root
+                .join("dimensions")
+                .join(namespace)
+                .join(path),
+        )
     }
     /// Adds, changes, or clears (`None`) a custom-dimension rule override.
-    pub(super) fn native_dimension_set_game_rule(&mut self, dimension: &str, rule: &str, value: Option<GameRuleValue>) -> bool {
-        if !self.native_custom_dimension_dir(dimension).is_some_and(|p| p.is_dir()) {
+    pub(super) fn native_dimension_set_game_rule(
+        &mut self,
+        dimension: &str,
+        rule: &str,
+        value: Option<GameRuleValue>,
+    ) -> bool {
+        if !self
+            .native_custom_dimension_dir(dimension)
+            .is_some_and(|p| p.is_dir())
+        {
             return false;
         }
-        let Some(definition) = gamerules::rule(rule) else { return false };
+        let Some(definition) = gamerules::rule(rule) else {
+            return false;
+        };
         if value.is_some() && matches!(definition.name, "advance_time" | "advance_weather") {
             return false;
         }
         if let Some(value) = value {
-            if !self.ui.global_rules.clone().set(definition.name, value) { return false; }
-            self.ui.dimension_rule_overrides.entry(dimension.to_owned()).or_default().insert(definition.name.to_owned(), value);
+            if !self.ui.global_rules.clone().set(definition.name, value) {
+                return false;
+            }
+            self.ui
+                .dimension_rule_overrides
+                .entry(dimension.to_owned())
+                .or_default()
+                .insert(definition.name.to_owned(), value);
         } else if let Some(overrides) = self.ui.dimension_rule_overrides.get_mut(dimension) {
             overrides.remove(definition.name);
-            if overrides.is_empty() { self.ui.dimension_rule_overrides.remove(dimension); }
+            if overrides.is_empty() {
+                self.ui.dimension_rule_overrides.remove(dimension);
+            }
         }
         if let Err(error) = self.save_dimension_rule_overrides() {
             log::error!("Horizon: could not save dimension game-rule overrides: {error}");
@@ -156,11 +204,19 @@ impl Game<'_> {
         }
         true
     }
-    pub(super) fn native_dimension_rename_game_rule_overrides(&mut self, old: &str, new: &str) -> bool {
+    pub(super) fn native_dimension_rename_game_rule_overrides(
+        &mut self,
+        old: &str,
+        new: &str,
+    ) -> bool {
         if let Some(values) = self.ui.dimension_rule_overrides.remove(old) {
-            self.ui.dimension_rule_overrides.insert(new.to_owned(), values);
+            self.ui
+                .dimension_rule_overrides
+                .insert(new.to_owned(), values);
             if let Err(error) = self.save_dimension_rule_overrides() {
-                log::error!("Horizon: could not save renamed dimension game-rule overrides: {error}");
+                log::error!(
+                    "Horizon: could not save renamed dimension game-rule overrides: {error}"
+                );
                 return false;
             }
         }

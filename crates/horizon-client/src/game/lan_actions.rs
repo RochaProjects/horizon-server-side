@@ -2852,7 +2852,12 @@ impl Game<'_> {
                             .available_rules()
                             .map(|r| play::GameRuleEntry {
                                 name: format!("minecraft:{}", r.name),
-                                value: self.ui.global_rules.get(r.name).unwrap_or(r.default).to_string(),
+                                value: self
+                                    .ui
+                                    .global_rules
+                                    .get(r.name)
+                                    .unwrap_or(r.default)
+                                    .to_string(),
                             })
                             .collect(),
                     }),
@@ -2862,10 +2867,21 @@ impl Game<'_> {
                 for entry in p.entries {
                     if let Some(rule) = horizon_client::gamerules::rule(&entry.name)
                         && let Some(value) = match rule.default {
-                            horizon_client::gamerules::Value::Bool(_) => entry.value.parse::<bool>().ok().map(horizon_client::gamerules::Value::Bool),
-                            horizon_client::gamerules::Value::Int(_) => entry.value.parse::<i32>().ok().map(horizon_client::gamerules::Value::Int),
+                            horizon_client::gamerules::Value::Bool(_) => entry
+                                .value
+                                .parse::<bool>()
+                                .ok()
+                                .map(horizon_client::gamerules::Value::Bool),
+                            horizon_client::gamerules::Value::Int(_) => entry
+                                .value
+                                .parse::<i32>()
+                                .ok()
+                                .map(horizon_client::gamerules::Value::Int),
                         }
-                        && { let mut rules = self.ui.global_rules.clone(); rules.set(rule.name, value) }
+                        && {
+                            let mut rules = self.ui.global_rules.clone();
+                            rules.set(rule.name, value)
+                        }
                     {
                         self.set_game_rule(rule, value);
                         let guest = &host.hub.guests[gi];

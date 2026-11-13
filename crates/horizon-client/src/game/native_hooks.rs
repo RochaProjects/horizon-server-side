@@ -10678,7 +10678,9 @@ impl Game<'_> {
             "minecraft:the_end" => super::Dim::End,
             _ => super::Dim::from_id(dimension),
         };
-        if dim.id() != dimension { return None; }
+        if dim.id() != dimension {
+            return None;
+        }
         if dim == self.dim {
             Some(&mut *self.world.random)
         } else {

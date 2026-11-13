@@ -3350,17 +3350,18 @@ impl Game<'_> {
     fn dimension_type(&self) -> &horizon_world::dimension_type::DimensionFacts {
         self.level_shapes
             .dimension_facts(self.dim.id())
-            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(self.level_key()))
+            .unwrap_or_else(|| {
+                horizon_world::dimension_type::DimensionFacts::of_builtin_level(self.level_key())
+            })
     }
-    fn dimension_type_of(
-        &self,
-        dim: Dim,
-    ) -> &horizon_world::dimension_type::DimensionFacts {
+    fn dimension_type_of(&self, dim: Dim) -> &horizon_world::dimension_type::DimensionFacts {
         self.level_shapes
             .dimension_facts(dim.id())
-            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(
-                horizon_core::LevelKey::builtin_or_overworld(dim.id()),
-            ))
+            .unwrap_or_else(|| {
+                horizon_world::dimension_type::DimensionFacts::of_builtin_level(
+                    horizon_core::LevelKey::builtin_or_overworld(dim.id()),
+                )
+            })
     }
     fn eye_position(&self) -> Option<[f64; 3]> {
         let p = self.player.as_ref()?;

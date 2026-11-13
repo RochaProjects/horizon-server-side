@@ -873,7 +873,9 @@ impl Game<'_> {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    let Ok(relative) = path.strip_prefix(base) else { continue };
+                    let Ok(relative) = path.strip_prefix(base) else {
+                        continue;
+                    };
                     let segment = relative.to_string_lossy();
                     let id = format!("{namespace}:{segment}");
                     if let Ok(key) = horizon_core::LevelKey::parse(&id) {

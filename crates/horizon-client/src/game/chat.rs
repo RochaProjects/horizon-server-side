@@ -251,7 +251,8 @@ pub struct UiState {
     /// Server-wide vanilla rules (`data/minecraft/game_rules.dat`).
     pub global_rules: GameRules,
     /// Optional overrides for custom dimensions, stored in the world save.
-    pub dimension_rule_overrides: BTreeMap<String, BTreeMap<String, horizon_client::gamerules::Value>>,
+    pub dimension_rule_overrides:
+        BTreeMap<String, BTreeMap<String, horizon_client::gamerules::Value>>,
     /// Rules currently effective in `Game::dim`: global values plus a custom-dimension override.
     pub rules: GameRules,
     pub clock: WorldClock,
@@ -1922,14 +1923,21 @@ impl Game<'_> {
         rules
     }
     pub(super) fn save_dimension_rule_overrides(&self) -> Result<(), String> {
-        let path = self.world_root.join("data/horizon/dimension_game_rules.json");
-        let Some(parent) = path.parent() else { return Err("Pasta de dados do mundo inválida.".into()) };
+        let path = self
+            .world_root
+            .join("data/horizon/dimension_game_rules.json");
+        let Some(parent) = path.parent() else {
+            return Err("Pasta de dados do mundo inválida.".into());
+        };
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let bytes = serde_json::to_vec_pretty(&self.ui.dimension_rule_overrides).map_err(|e| e.to_string())?;
+        let bytes = serde_json::to_vec_pretty(&self.ui.dimension_rule_overrides)
+            .map_err(|e| e.to_string())?;
         std::fs::write(path, bytes).map_err(|e| e.to_string())
     }
     pub(super) fn load_dimension_rule_overrides(&mut self) {
-        let path = self.world_root.join("data/horizon/dimension_game_rules.json");
+        let path = self
+            .world_root
+            .join("data/horizon/dimension_game_rules.json");
         self.ui.dimension_rule_overrides = std::fs::read(path)
             .ok()
             .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -1938,9 +1946,9 @@ impl Game<'_> {
             overrides.remove("advance_time");
             overrides.remove("advance_weather");
         }
-        self.ui.dimension_rule_overrides.retain(|id, values| {
-            !id.starts_with("minecraft:") && !values.is_empty()
-        });
+        self.ui
+            .dimension_rule_overrides
+            .retain(|id, values| !id.starts_with("minecraft:") && !values.is_empty());
     }
     /// `ServerClockManager.ServerClockInstance.loadFrom`: restore the existing
     /// Overworld state when a world opens; clear the other command-state cache.

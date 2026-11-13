@@ -272,11 +272,11 @@ impl WorldRequest {
         let dim = Dim::from_id(&level.dimension);
         let shapes = level_shapes(&save_root, res.biomes());
         let shape = shapes.get(dim.id());
-        let dimension_facts = shapes
-            .dimension_facts(dim.id())
-            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(
+        let dimension_facts = shapes.dimension_facts(dim.id()).unwrap_or_else(|| {
+            horizon_world::dimension_type::DimensionFacts::of_builtin_level(
                 horizon_core::LevelKey::builtin_or_overworld(dim.id()),
-            ));
+            )
+        });
         let streaming_step = startup::step("world.make_streaming");
         let (mut streaming, save, locator) = make_streaming(
             res,
@@ -692,24 +692,24 @@ pub(super) fn level_shapes(
         horizon_client::datapack::worldgen_overrides(&enabled, |b| biomes.contains(b));
     // The sea levels of the noise settings the packs replace, for this world only.
     let dimension_ids: Vec<String> = [
-            "minecraft:overworld",
-            "minecraft:the_nether",
-            "minecraft:the_end",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .chain(overrides.dimension_ids().map(str::to_owned))
-        .collect();
+        "minecraft:overworld",
+        "minecraft:the_nether",
+        "minecraft:the_end",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .chain(overrides.dimension_ids().map(str::to_owned))
+    .collect();
     horizon_world::level::set_sea_levels(
         dimension_ids
-        .iter()
-        .filter_map(|level| {
-            Some((
-                horizon_core::LevelKey::parse(level).ok()?,
-                overrides.level_sea_level(level)?,
-            ))
-        })
-        .collect(),
+            .iter()
+            .filter_map(|level| {
+                Some((
+                    horizon_core::LevelKey::parse(level).ok()?,
+                    overrides.level_sea_level(level)?,
+                ))
+            })
+            .collect(),
     );
     for level in dimension_ids.iter().map(String::as_str) {
         if horizon_core::LevelKey::parse(level).is_err() {
@@ -758,11 +758,13 @@ pub(super) fn level_shapes(
                     continue;
                 }
             }
-            serde_json::Value::Object(_) => horizon_world::dimension_type::DimensionFacts::from_json(
-                level,
-                dimension_type,
-                &|tag| timeline_tag_ids(&enabled, tag, 0),
-            ),
+            serde_json::Value::Object(_) => {
+                horizon_world::dimension_type::DimensionFacts::from_json(
+                    level,
+                    dimension_type,
+                    &|tag| timeline_tag_ids(&enabled, tag, 0),
+                )
+            }
             _ => continue,
         };
         let (Ok(key), Ok(facts)) = (horizon_core::LevelKey::parse(level), facts) else {
@@ -790,7 +792,11 @@ pub(super) fn level_shapes(
 }
 
 /// Expands a timeline tag from the enabled pack stack (lower priority first).
-fn timeline_tag_ids(packs: &[&horizon_client::datapack::DataPack], tag: &str, depth: u8) -> Vec<String> {
+fn timeline_tag_ids(
+    packs: &[&horizon_client::datapack::DataPack],
+    tag: &str,
+    depth: u8,
+) -> Vec<String> {
     if depth >= 8 {
         return Vec::new();
     }
@@ -1080,8 +1086,8 @@ pub(super) fn make_streaming(
         .leaf_culling_effective(&settings.resource_packs);
     streaming.biome_zoom = BiomeZoom::new(obfuscate_seed(seed));
     streaming.sky_light = dimension_facts.height.has_skylight;
-    streaming.nether_shading = dimension_facts.cardinal_light
-        == horizon_world::dimension_type::CardinalLight::Nether;
+    streaming.nether_shading =
+        dimension_facts.cardinal_light == horizon_world::dimension_type::CardinalLight::Nether;
     // A server draws nothing: neither the integrated server nor the
     // dedicated one meshes sections.
     streaming.mesh = options.execution_role.is_client();
