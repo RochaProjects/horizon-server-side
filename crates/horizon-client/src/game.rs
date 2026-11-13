@@ -426,7 +426,6 @@ mod sculk_fixture;
 mod seats;
 mod server_links;
 mod server_packs;
-#[cfg(feature = "server-plugins")]
 mod server_plugins;
 mod server_travel;
 mod shader_packs;

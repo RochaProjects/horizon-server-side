@@ -5,14 +5,18 @@ use super::{
     Game,
     native_server::{NativeCommand, NativeServerPlayer},
 };
+#[cfg(feature = "server-plugins")]
 use horizon_client::{items::ItemStack, lan::data::component_nbt, text::Text};
+#[cfg(feature = "server-plugins")]
 use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem, TransactionError};
 
+#[cfg(feature = "server-plugins")]
 struct GameHost<'g, 'a, 'c> {
     game: &'g mut Game<'a>,
     commands: Option<&'c mut Vec<NativeCommand>>,
 }
 
+#[cfg(feature = "server-plugins")]
 impl Host for GameHost<'_, '_, '_> {
     fn register_command(&mut self, usage: &str) {
         if let Some(commands) = self.commands.as_deref_mut() {
@@ -100,10 +104,12 @@ impl Host for GameHost<'_, '_, '_> {
     }
 }
 
+#[cfg(feature = "server-plugins")]
 fn root() -> Option<std::path::PathBuf> {
     std::env::current_dir().ok()
 }
 
+#[cfg(feature = "server-plugins")]
 pub(super) fn register_commands(game: &mut Game<'_>, commands: &mut Vec<NativeCommand>) {
     if game.options.dedicated.is_none() {
         return;
@@ -118,6 +124,7 @@ pub(super) fn register_commands(game: &mut Game<'_>, commands: &mut Vec<NativeCo
     horizon_server_plugin_loader::register_commands(&root, &mut host);
 }
 
+#[cfg(feature = "server-plugins")]
 pub(super) fn perform_command(
     game: &mut Game<'_>,
     player: &NativeServerPlayer,
@@ -137,6 +144,7 @@ pub(super) fn perform_command(
     *ran = horizon_server_plugin_loader::perform_command(&root, &mut host, player.uuid, command);
 }
 
+#[cfg(feature = "server-plugins")]
 pub(super) fn menu_clicked(
     game: &mut Game<'_>,
     player: u128,
@@ -158,6 +166,7 @@ pub(super) fn menu_clicked(
     horizon_server_plugin_loader::menu_click(&root, &mut host, player, window, slot, button, mode);
 }
 
+#[cfg(feature = "server-plugins")]
 pub(super) fn dispatch_event(
     game: &mut Game<'_>,
     kind: u32,
@@ -188,6 +197,7 @@ pub(super) fn dispatch_event(
     horizon_server_plugin_loader::dispatch_event(&root, &mut host, &event)
 }
 
+#[cfg(feature = "server-plugins")]
 pub(super) fn menu_closed(game: &mut Game<'_>, player: u128, window: i32) {
     if game.options.dedicated.is_none() {
         return;
@@ -210,3 +220,72 @@ pub(super) fn menu_closed(game: &mut Game<'_>, player: u128, window: i32) {
     };
     horizon_server_plugin_loader::dispatch_event(&root, &mut host, &event);
 }
+
+#[cfg(feature = "server-plugins")]
+pub(super) fn block_break(game: &mut Game<'_>, pos: [i32; 3], data_id: u32) -> bool {
+    let Some(player) = game.native_acting_player() else {
+        return false;
+    };
+    let (uuid, name) = (player.uuid, player.name.clone());
+    dispatch_event(
+        game,
+        horizon_server_plugin_api::event::BLOCK_BREAK,
+        uuid,
+        &name,
+        pos,
+        data_id,
+    )
+}
+
+#[cfg(feature = "server-plugins")]
+pub(super) fn player_join(game: &mut Game<'_>, player: u128, name: &str) {
+    dispatch_event(
+        game,
+        horizon_server_plugin_api::event::PLAYER_JOIN,
+        player,
+        name,
+        [0; 3],
+        0,
+    );
+}
+
+#[cfg(feature = "server-plugins")]
+pub(super) fn player_quit(game: &mut Game<'_>, player: u128, name: &str) {
+    dispatch_event(
+        game,
+        horizon_server_plugin_api::event::PLAYER_QUIT,
+        player,
+        name,
+        [0; 3],
+        0,
+    );
+}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn register_commands(_: &mut Game<'_>, _: &mut Vec<NativeCommand>) {}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn perform_command(
+    _: &mut Game<'_>,
+    _: &NativeServerPlayer,
+    _: &str,
+    _: &mut bool,
+) {
+}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn menu_clicked(_: &mut Game<'_>, _: u128, _: i32, _: i32, _: i32, _: i32) {}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn menu_closed(_: &mut Game<'_>, _: u128, _: i32) {}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn block_break(_: &mut Game<'_>, _: [i32; 3], _: u32) -> bool {
+    false
+}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn player_join(_: &mut Game<'_>, _: u128, _: &str) {}
+
+#[cfg(not(feature = "server-plugins"))]
+pub(super) fn player_quit(_: &mut Game<'_>, _: u128, _: &str) {}
