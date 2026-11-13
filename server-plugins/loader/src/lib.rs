@@ -31,6 +31,9 @@ pub struct ItemDelta {
     pub delta: i32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TransactionError;
+
 #[derive(Clone, Debug)]
 pub struct Event {
     pub kind: u32,
@@ -60,7 +63,7 @@ pub trait Host {
         player: u128,
         items: &[ItemDelta],
         finish: &mut dyn FnMut(bool) -> bool,
-    ) -> Result<(), ()>;
+    ) -> Result<(), TransactionError>;
 }
 
 struct HostBridge<'a> {
@@ -498,8 +501,8 @@ unsafe extern "C-unwind" fn transact(
     });
     match result {
         Ok(()) => 1,
-        Err(()) if storage_error => 4,
-        Err(()) => 3,
+        Err(_) if storage_error => 4,
+        Err(_) => 3,
     }
 }
 

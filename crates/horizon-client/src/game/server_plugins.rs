@@ -6,7 +6,7 @@ use super::{
     native_server::{NativeCommand, NativeServerPlayer},
 };
 use horizon_client::{items::ItemStack, lan::data::component_nbt, text::Text};
-use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem};
+use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem, TransactionError};
 
 struct GameHost<'g, 'a, 'c> {
     game: &'g mut Game<'a>,
@@ -89,13 +89,14 @@ impl Host for GameHost<'_, '_, '_> {
         player: u128,
         items: &[ItemDelta],
         finish: &mut dyn FnMut(bool) -> bool,
-    ) -> Result<(), ()> {
+    ) -> Result<(), TransactionError> {
         let changes: Vec<_> = items
             .iter()
             .map(|item| (item.item.clone(), item.delta))
             .collect();
         self.game
             .native_plugin_item_transaction(player, &changes, finish)
+            .map_err(|()| TransactionError)
     }
 }
 
