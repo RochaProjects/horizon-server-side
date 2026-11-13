@@ -1,4 +1,4 @@
-//! Hologramas persistentes com quebra de linha e opções de fundo por linha.
+// Hologramas persistentes com quebra de linha e opções de fundo por linha.
 use super::smp_store;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

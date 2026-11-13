@@ -1,6 +1,6 @@
-//! Caixas e chaves AuraEssentials. As cinco chaves têm IDs distintos e os
-//! prêmios usam a serialização NBT dos ItemStacks do Horizon para preservar
-//! componentes.
+// Caixas e chaves AuraEssentials. As cinco chaves têm IDs distintos e os
+// prêmios usam a serialização NBT dos ItemStacks do Horizon para preservar
+// componentes.
 use super::smp_store;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

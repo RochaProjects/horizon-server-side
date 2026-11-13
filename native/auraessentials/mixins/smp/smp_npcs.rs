@@ -1,5 +1,5 @@
-//! NPCs montados como cubos `item_display` dos modelos AuraNPC. Não cria
-//! jogador falso, armor stand ou skin de jogador.
+// NPCs montados como cubos `item_display` dos modelos AuraNPC. Não cria
+// jogador falso, armor stand ou skin de jogador.
 use super::smp_store;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};

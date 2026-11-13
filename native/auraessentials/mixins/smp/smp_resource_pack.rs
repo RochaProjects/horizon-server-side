@@ -1,5 +1,5 @@
-//! Pacote de recursos Java do AuraEssentials. URL e SHA ficam num JSON editável
-//! na pasta de dados do mod; trocar o pack não exige recompilar o engine.
+// Pacote de recursos Java do AuraEssentials. URL e SHA ficam num JSON editável
+// na pasta de dados do mod; trocar o pack não exige recompilar o engine.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;

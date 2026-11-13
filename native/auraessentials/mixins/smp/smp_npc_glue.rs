@@ -1,5 +1,5 @@
-//! Render and manage the bundled Java AuraNPC models as persistent item
-//! displays, with one invisible interaction volume for configured commands.
+// Render and manage the bundled Java AuraNPC models as persistent item
+// displays, with one invisible interaction volume for configured commands.
 use super::{smp_npcs::{self, Npc}, smp_store};
 use crate::game::{Game, native_server::NativeServerPlayer};
 use horizon_client::{items::ItemStack, text::Text};

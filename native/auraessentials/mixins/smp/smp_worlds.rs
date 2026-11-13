@@ -1,4 +1,4 @@
-//! Dimension management for Horizon 26.x worlds and safe player-record resets.
+// Dimension management for Horizon 26.x worlds and safe player-record resets.
 use super::{smp_economy::Out, smp_store};
 use crate::game::{Game, native_server::NativeServerPlayer};
 use serde::{Deserialize, Serialize};
