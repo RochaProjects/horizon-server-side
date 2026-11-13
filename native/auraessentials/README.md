@@ -20,7 +20,7 @@ O sistema usa como base técnica o mod SMP nativo mantido em [`horizon-rust/hori
 
 Um `.hnmod` sozinho não instala recursos no servidor dedicado. O mod precisa ser incorporado a um engine Horizon e o servidor precisa iniciar usando esse engine. A compilação deve usar Linux x86_64, a mesma versão de Horizon do pacote de servidor e a ferramenta `native/tools/native.py` deste repositório.
 
-O fluxo de publicação planejado é gerar um pacote do engine no GitHub Actions, publicá-lo em Releases deste repositório e fazer o `server.jar` baixar o pacote compatível. O loader ainda usa o engine padrão até essa integração ser publicada.
+O GitHub Actions gera o engine e as ferramentas do servidor, e publica o pacote em Releases deste repositório. O `server.jar` baixa esse pacote e prepara os recursos do Minecraft na primeira inicialização. Para evitar distribuir cópias extras dos JARs ou classes compiladas, o Horizon compila os exporters localmente durante essa preparação e apaga os arquivos temporários ao terminar.
 
 ## Próximos módulos
 
