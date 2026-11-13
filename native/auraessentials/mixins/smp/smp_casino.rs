@@ -1632,8 +1632,8 @@ fn step(stake: i64, up: bool) -> i64 {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use super::super::smp_economy::Config as EconomyConfig;
     use super::*;
-    use crate::smp_economy::Config as EconomyConfig;
 
     pub const A: u128 = 1;
     pub const B: u128 = 2;

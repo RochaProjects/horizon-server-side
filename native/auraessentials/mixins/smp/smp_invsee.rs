@@ -368,10 +368,11 @@ impl<S: Stack> Invsee<S> {
         if !put.is_empty() {
             parts.push(format!("put {put}"));
         }
+        let online_suffix = if v.online { "" } else { " (offline)" };
         Some(format!(
             "{op_name} edited {}'s {what}{}: {}",
             v.name,
-            if v.online { "" } else { " (offline)" },
+            online_suffix,
             parts.join("; ")
         ))
     }

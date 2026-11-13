@@ -1278,8 +1278,8 @@ impl AuctionHouse {
 
 #[cfg(test)]
 mod tests {
+    use super::super::smp_economy::Config as EcoConfig;
     use super::*;
-    use crate::smp_economy::Config as EcoConfig;
     use std::fs;
 
     const ALEX: u128 = 1;

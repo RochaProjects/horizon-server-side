@@ -316,8 +316,8 @@ impl Report {
 
 #[cfg(test)]
 mod tests {
+    use super::super::smp_economy::Config as EcoConfig;
     use super::*;
-    use crate::smp_economy::Config as EcoConfig;
 
     const A: u128 = 1;
     const B: u128 = 2;
