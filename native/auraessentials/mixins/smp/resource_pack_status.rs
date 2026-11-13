@@ -1,4 +1,4 @@
-pub(super) fn aura_essentials_resource_pack_status(
+fn aura_essentials_resource_pack_status(
     game: &mut crate::game::Game<'_>,
     player: u128,
     pack: u128,
