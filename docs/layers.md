@@ -60,7 +60,9 @@ Vanilla Minecraft: Java Edition 26.3, and nothing else.
 
 - **Belongs:** gameplay, world data and generation, block behaviour, mobs, items, commands, the network
   protocol, rendering, sound, vanilla's screens, saves, the integrated and dedicated servers. It also holds
-  optimizations that keep vanilla's behaviour, and the extension points the platform plugs into.
+  optimizations that keep vanilla's behaviour, and the extension points the platform plugs into. The dedicated
+  server also owns the generic versioned C ABI and shared-library loader that lets runtime plugins consume those
+  extension points; it contains no plugin business logic.
 - **Also the render pipeline's own capabilities that vanilla's path doesn't use**, when a higher layer could only
   get them by rebuilding the pipeline. The one today is the **compositor**: drawing a view into an offscreen target
   and composing several targets into a window's views. With one view (vanilla, and splitscreen with one player)
@@ -97,7 +99,7 @@ public API that mods, desktop-class ports and the Horizon layer build on.
   Horizon feature builds on them instead of editing or copying engine code.
 - **Examples:** `horizon-shader-api`, `horizon-shaders`, `horizon-optifine` (`cem/`), `horizon-polytone`,
   `horizon-hdr`, `horizon-dualsense`, `horizon-mods`, `cargo-horizon-mod`, `horizon-anticheat`, `horizon-mcp`,
-  `horizon-theme`. Still in engine crates today: `game/mod_api_host.rs`, `game/native_*.rs`, `shader_ui.rs`,
+  `horizon-theme`, `horizon-plugin-aura-loja` (an independently loaded example plugin). Still in engine crates today: `game/mod_api_host.rs`, `game/native_*.rs`, `shader_ui.rs`,
   `hdr_calibration.rs`.
 - **Never:** a built-in address (every address comes from the player, a file or a setting), anything that names
   a Horizon crate, cosmetics, the shop, official or partner servers, uploads to playhorizon.dev.
