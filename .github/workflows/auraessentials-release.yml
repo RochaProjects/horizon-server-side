@@ -46,6 +46,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev pkg-config
 
+      - name: Restore Rust build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/target/cargo
+            native/target/base-cargo
+            native/target/horizon
+            native/target/horizon-mixins
+            native/target/stage
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-rust-1.99-
+
       - name: Build AuraEssentials into the pinned Horizon engine
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -57,7 +73,7 @@ jobs:
 
       - name: Build matching server tools and package the engine
         env:
-          CARGO_TARGET_DIR: ${{ runner.temp }}/horizon-base-target
+          CARGO_TARGET_DIR: ${{ github.workspace }}/native/target/base-cargo
         run: |
           set -euo pipefail
           source="native/target/horizon/$HORIZON_REVISION"

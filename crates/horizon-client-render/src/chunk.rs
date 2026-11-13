@@ -154,7 +154,7 @@ impl LevelShapes {
     }
     /// The dimension type registry key for a level id. A custom level without
     /// an explicit stem uses the Overworld type.
-    pub fn dimension_type_id(&self, id: &str) -> &str {
+    pub fn dimension_type_id<'a>(&'a self, id: &'a str) -> &'a str {
         self.dimension_facts(id)
             .map(|facts| facts.id.as_str())
             .unwrap_or_else(|| match id {
