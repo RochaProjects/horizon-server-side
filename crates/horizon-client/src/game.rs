@@ -7608,10 +7608,15 @@ impl Game<'_> {
             r.clear_sections(self.world.layout());
         }
         self.apply_settings();
-        let facts = self.dimension_type_of(dim);
-        self.streaming.sky_light = facts.height.has_skylight;
-        self.streaming.nether_shading =
-            facts.cardinal_light == horizon_world::dimension_type::CardinalLight::Nether;
+        let (sky_light, nether_shading) = {
+            let facts = self.dimension_type_of(dim);
+            (
+                facts.height.has_skylight,
+                facts.cardinal_light == horizon_world::dimension_type::CardinalLight::Nether,
+            )
+        };
+        self.streaming.sky_light = sky_light;
+        self.streaming.nether_shading = nether_shading;
         self.load_world_state();
         // The level the world opens in, before any of its chunks.
         self.native_level_opened(dim);

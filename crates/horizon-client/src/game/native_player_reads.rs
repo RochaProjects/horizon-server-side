@@ -206,7 +206,7 @@ impl Game<'_> {
 
 impl Game<'_> {
     /// The player whose state is swapped in now.
-    fn acting(&self, uuid: u128) -> bool {
+    pub(super) fn acting(&self, uuid: u128) -> bool {
         self.lan_acting_uuid == Some(uuid) && self.player.is_some()
     }
 

@@ -94,7 +94,7 @@ fn display_transform(rotation: Quat, scale: f32) -> Compound {
 fn display_item(model: &smp_npcs::Model, cube_index: usize) -> Option<Compound> {
     let mut stack = ItemStack { item: "minecraft:paper".into(), count: 1, damage: 0, extra: None };
     let model_id = format!("aura:npc/{}/cube_{cube_index}", model.key);
-    stack.data_mut().set_other("minecraft:item_model", Some(Tag::String(model_id.into())));
+    stack.data_mut().set_other("minecraft:item_model", Some(Tag::String(model_id.as_str().into())));
     match horizon_items::item_nbt::item_to_nbt(&stack) { Tag::Compound(c) => Some(c), _ => None }
 }
 
@@ -165,7 +165,8 @@ pub fn render(game: &mut Game<'_>, npc: &Npc) -> Result<usize, String> {
     }
     if npc.name_visible && !npc.name.is_empty() {
         let mut text = Compound::new();
-        text.insert("text".into(), Tag::String(serde_json::json!({"text":npc.name,"italic":false,"color":"white"}).to_string().into()));
+        let serialized_name = serde_json::json!({"text":npc.name,"italic":false,"color":"white"}).to_string();
+        text.insert("text".into(), Tag::String(serialized_name.as_str().into()));
         text.insert("line_width".into(), Tag::Int(240));
         text.insert("alignment".into(), Tag::String("center".into()));
         text.insert("billboard".into(), Tag::String("center".into()));
@@ -310,7 +311,7 @@ pub fn interact_entity(game: &mut Game<'_>, entity: i32, kind: &str, claimed: &m
     let Ok(data) = smp_npcs::Data::open(&world.join(smp_store::DIR)) else { return };
     for npc in data.npcs.values() {
         let Some((dimension, npc_entity, _)) = game.native_entity_by_uuid(smp_npcs::entity_uuid(&npc.id, INTERACTION_PART)) else { continue };
-        if npc_entity != entity || dimension != player.dimension { continue; }
+        if Some(npc_entity) != u32::try_from(entity).ok() || dimension != player.dimension { continue; }
         *claimed = true;
         if npc.commands.is_empty() { tell(game, player.uuid, &npc.name); return; }
         for line in &npc.commands {

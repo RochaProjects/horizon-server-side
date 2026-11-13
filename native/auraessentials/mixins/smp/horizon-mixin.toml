@@ -162,6 +162,12 @@ name = "smp_presence"
 source = "smp_presence.rs"
 
 [[module]]
+id = "resource_pack"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_resource_pack"
+source = "smp_resource_pack.rs"
+
+[[module]]
 id = "holograms"
 file = "crates/horizon-client/src/game.rs"
 name = "smp_holograms"

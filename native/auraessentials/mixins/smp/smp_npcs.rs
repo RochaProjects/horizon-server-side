@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 
 pub const COMMANDS: [&str; 1] = ["npc"];
-pub const USAGES: [&str; 25] = [
+pub const USAGES: [&str; 26] = [
     "npc",
     "npc listar",
     "npc list",

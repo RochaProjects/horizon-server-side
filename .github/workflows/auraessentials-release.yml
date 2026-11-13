@@ -61,6 +61,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-
             ${{ runner.os }}-rust-1.99-
+          save-always: true
 
       - name: Build AuraEssentials into the pinned Horizon engine
         env:

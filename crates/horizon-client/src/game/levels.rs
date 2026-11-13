@@ -248,6 +248,7 @@ impl Levels {
 impl Game<'_> {
     /// A new level for `dim`, opened from the save (`MinecraftServer.createLevels`).
     fn open_level(&self, dim: Dim) -> Result<Parked> {
+        let dimension_facts = self.dimension_type_of(dim);
         let (streaming, save, locator) = super::world_loading::make_streaming(
             &self.res,
             &self.pack,
@@ -256,13 +257,14 @@ impl Game<'_> {
             &self.world_root,
             dim,
             self.level_shapes.get(dim.id()),
+            dimension_facts,
             self.level.seed,
             &self.level.enabled_features,
         )?;
         let mut world = World::new(self.res.facts().air, self.level.seed);
         world.attachments = save.load_attachments();
         world.shape = self.level_shapes.get(dim.id());
-        world.fast_lava = self.dimension_type_of(dim).fast_lava;
+        world.fast_lava = dimension_facts.fast_lava;
         let tickets = ChunkTickets::with_saved_portal(save.load_portal_tickets());
         Ok(Parked {
             world,

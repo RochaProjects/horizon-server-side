@@ -728,9 +728,10 @@ fn hologram_entity_uuid(id: &str, line: usize) -> u128 {
 fn hologram_text_nbt(line: &str, background: bool, width: u16) -> horizon_world::nbt::Compound {
     use horizon_world::nbt::{Compound, Tag};
     let mut nbt = Compound::new();
+    let serialized_text = serde_json::json!({ "text": line, "italic": false }).to_string();
     nbt.insert(
         "text".into(),
-        Tag::String(serde_json::json!({ "text": line, "italic": false }).to_string().into()),
+        Tag::String(serialized_text.as_str().into()),
     );
     nbt.insert("line_width".into(), Tag::Int(i32::from(width)));
     nbt.insert("background".into(), Tag::Int(if background { 0x4000_0000 } else { 0 }));
@@ -802,25 +803,6 @@ fn hologram_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str
     };
     let words: Vec<&str> = line.split_whitespace().collect();
     let action = words.get(1).copied().unwrap_or("listar");
-    if action == "preview" || action == "prever" {
-        let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else {
-            game.native_tell(player.uuid, Text::literal("Uso: /caixa preview <tipo>"));
-            return true;
-        };
-        let rewards = data.rewards.get(&kind).cloned().unwrap_or_default();
-        let mut items = vec![None; 27];
-        for (slot, reward) in rewards.iter().take(27).enumerate() {
-            if let Some(stack) = decode_stack(&reward.item_nbt_hex) {
-                items[slot] = Some(with_lore(stack, &[(format!("Peso: {}", reward.weight), "gray")]));
-            }
-        }
-        if rewards.is_empty() {
-            game.native_tell(player.uuid, Text::literal("Esta caixa ainda não tem prêmios."));
-        } else if game.native_open_menu(player.uuid, 3, Text::literal(format!("Prêmios: {}", kind.id())), items).is_none() {
-            game.native_tell(player.uuid, Text::literal("Não foi possível abrir a prévia."));
-        }
-        return true;
-    }
     let mut changed = false;
     let reply = match action {
         "listar" | "lista" | "list" | "menu" => {
@@ -933,10 +915,10 @@ fn stack_key_kind(stack: &ItemStack) -> Option<CrateKind> {
     let horizon_world::nbt::Tag::Compound(custom) = stack.data()?.other("minecraft:custom_data")? else {
         return None;
     };
-    let horizon_world::nbt::Tag::String(value) = custom.get("auraessentials_key")? else {
+    let horizon_world::nbt::Tag::String(value) = custom.get(&"auraessentials_key".into())? else {
         return None;
     };
-    CrateKind::parse(value.as_ref())
+    CrateKind::parse(&value.to_string_lossy())
 }
 
 fn crate_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> bool {
@@ -954,6 +936,25 @@ fn crate_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -
     };
     let words: Vec<&str> = line.split_whitespace().collect();
     let action = words.get(1).copied().unwrap_or("listar");
+    if action == "preview" || action == "prever" {
+        let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else {
+            game.native_tell(player.uuid, Text::literal("Uso: /caixa preview <tipo>"));
+            return true;
+        };
+        let rewards = data.rewards.get(&kind).cloned().unwrap_or_default();
+        let mut items = vec![None; 27];
+        for (slot, reward) in rewards.iter().take(27).enumerate() {
+            if let Some(stack) = decode_stack(&reward.item_nbt_hex) {
+                items[slot] = Some(with_lore(stack, &[(format!("Peso: {}", reward.weight), "gray")]));
+            }
+        }
+        if rewards.is_empty() {
+            game.native_tell(player.uuid, Text::literal("Esta caixa ainda não tem prêmios."));
+        } else if game.native_open_menu(player.uuid, 3, Text::literal(format!("Prêmios: {}", kind.id())), items).is_none() {
+            game.native_tell(player.uuid, Text::literal("Não foi possível abrir a prévia."));
+        }
+        return true;
+    }
     let mut changed = false;
     let reply = match action {
         "listar" => {
@@ -983,7 +984,7 @@ fn crate_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -
                 game.native_tell(player.uuid, Text::literal("Uso: /caixa definir <tipo> <x> <y> <z>"));
                 return true;
             };
-            data.add_block(CrateBlock { dimension: player.dimension.clone(), x, y, z, kind });
+            data.add_block(CrateBlock { dimension: player.dimension.clone(), x, y, z, kind, key_id: None });
             changed = true;
             format!("Caixa {} definida em {} {x} {y} {z}.", kind.id(), player.dimension)
         }
@@ -1100,7 +1101,7 @@ pub(in crate::game) fn crate_right_click(game: &mut Game<'_>, pos: [i32; 3], can
         let Ok(mut data) = smp_crates::Data::open(&dir) else { return };
         match action {
             Some(kind) => {
-                data.add_block(CrateBlock { dimension: player.dimension.clone(), x: pos[0], y: pos[1], z: pos[2], kind });
+                data.add_block(CrateBlock { dimension: player.dimension.clone(), x: pos[0], y: pos[1], z: pos[2], kind, key_id: None });
                 game.native_tell(player.uuid, Text::literal(format!("Caixa {} definida em {} {} {} {}.", kind.id(), player.dimension, pos[0], pos[1], pos[2])));
             }
             None => {
