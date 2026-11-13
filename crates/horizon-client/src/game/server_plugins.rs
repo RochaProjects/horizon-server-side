@@ -265,13 +265,7 @@ pub(super) fn player_quit(game: &mut Game<'_>, player: u128, name: &str) {
 pub(super) fn register_commands(_: &mut Game<'_>, _: &mut Vec<NativeCommand>) {}
 
 #[cfg(not(feature = "server-plugins"))]
-pub(super) fn perform_command(
-    _: &mut Game<'_>,
-    _: &NativeServerPlayer,
-    _: &str,
-    _: &mut bool,
-) {
-}
+pub(super) fn perform_command(_: &mut Game<'_>, _: &NativeServerPlayer, _: &str, _: &mut bool) {}
 
 #[cfg(not(feature = "server-plugins"))]
 pub(super) fn menu_clicked(_: &mut Game<'_>, _: u128, _: i32, _: i32, _: i32, _: i32) {}
