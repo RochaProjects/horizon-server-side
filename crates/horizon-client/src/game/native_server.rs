@@ -1292,6 +1292,8 @@ impl Game<'_> {
     /// `native_take_items`, this supports mod items with custom components.
     /// False when another player's inventory is not in reach or the held
     /// stack changed. Used by native server mods for physical keys.
+    // Called by native server mods; unused in the unmodified game.
+    #[allow(dead_code)]
     pub(super) fn native_take_matching_held(
         &mut self,
         uuid: u128,

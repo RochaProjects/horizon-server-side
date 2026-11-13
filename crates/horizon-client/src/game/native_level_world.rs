@@ -100,6 +100,8 @@ impl Game<'_> {
         true
     }
     /// Reads a custom dimension's effective rule without making it active.
+    // These entry points are called by the native Aura Essentials mixin.
+    #[allow(dead_code)]
     pub(super) fn native_dimension_game_rule(
         &self,
         dimension: &str,
@@ -113,6 +115,7 @@ impl Game<'_> {
         }
         self.effective_rules_for_dimension(dimension).get(rule)
     }
+    #[allow(dead_code)]
     pub(super) fn native_dimension_has_game_rule_override(
         &self,
         dimension: &str,
@@ -126,6 +129,7 @@ impl Game<'_> {
             .get(dimension)
             .is_some_and(|values| values.contains_key(rule.name))
     }
+    #[allow(dead_code)]
     fn native_custom_dimension_dir(&self, dimension: &str) -> Option<std::path::PathBuf> {
         if dimension.starts_with("minecraft:") {
             return None;
@@ -149,6 +153,7 @@ impl Game<'_> {
         )
     }
     /// Adds, changes, or clears (`None`) a custom-dimension rule override.
+    #[allow(dead_code)]
     pub(super) fn native_dimension_set_game_rule(
         &mut self,
         dimension: &str,
@@ -192,6 +197,7 @@ impl Game<'_> {
         }
         true
     }
+    #[allow(dead_code)]
     pub(super) fn native_dimension_clear_game_rule_overrides(&mut self, dimension: &str) -> bool {
         self.ui.dimension_rule_overrides.remove(dimension);
         if let Err(error) = self.save_dimension_rule_overrides() {
@@ -204,6 +210,7 @@ impl Game<'_> {
         }
         true
     }
+    #[allow(dead_code)]
     pub(super) fn native_dimension_rename_game_rule_overrides(
         &mut self,
         old: &str,

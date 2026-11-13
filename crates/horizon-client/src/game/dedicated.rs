@@ -1146,7 +1146,7 @@ impl Game<'_> {
         // sets the show_advancement_messages rule once, as the file is read.
         if let Some(announce) = props.announce_player_achievements {
             self.set_game_rule(
-                &horizon_client::gamerules::rule("show_advancement_messages").unwrap(),
+                horizon_client::gamerules::rule("show_advancement_messages").unwrap(),
                 horizon_client::gamerules::Value::Bool(announce),
             );
         }

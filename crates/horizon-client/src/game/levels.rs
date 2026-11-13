@@ -878,10 +878,10 @@ impl Game<'_> {
                     };
                     let segment = relative.to_string_lossy();
                     let id = format!("{namespace}:{segment}");
-                    if let Ok(key) = horizon_core::LevelKey::parse(&id) {
-                        if path.join("region").exists() || path.join("data").exists() {
-                            out.push(Dim::from_id(key.id()));
-                        }
+                    if let Ok(key) = horizon_core::LevelKey::parse(&id)
+                        && (path.join("region").exists() || path.join("data").exists())
+                    {
+                        out.push(Dim::from_id(key.id()));
                     }
                     visit(base, &path, namespace, out);
                 }
@@ -1044,6 +1044,8 @@ impl Game<'_> {
 
     /// Saves and closes an idle parked dimension for a native world manager.
     /// Refuses the active level or any level still held by a player or ticket.
+    // Called by the native Aura Essentials mixin; unused in the unmodified game.
+    #[allow(dead_code)]
     pub(super) fn native_unload_dimension(&mut self, id: &str) -> bool {
         let dim = Dim::from_id(id);
         if dim.id() != id || dim == Dim::Overworld || dim == self.dim {

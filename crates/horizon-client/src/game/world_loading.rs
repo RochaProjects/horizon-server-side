@@ -772,15 +772,13 @@ pub(super) fn level_shapes(
             continue;
         };
         let type_id = facts.id.clone();
-        if let Some(shape) = horizon_client::chunk::LevelShape::new(
+        if let Ok(shape) = horizon_client::chunk::LevelShape::new(
             facts.height.min_y,
             facts.height.height,
             facts.height.logical_height,
             facts.height.has_skylight,
             facts.height.has_ceiling,
-        )
-        .ok()
-        {
+        ) {
             *shapes.get_mut(level) = shape;
             if horizon_core::LevelKey::parse(&type_id).is_ok() {
                 *shapes.get_mut(&type_id) = shape;

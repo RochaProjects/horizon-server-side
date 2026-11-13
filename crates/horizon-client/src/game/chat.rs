@@ -1922,6 +1922,8 @@ impl Game<'_> {
         }
         rules
     }
+    // Called by the native Aura Essentials mixin; unused in the unmodified game.
+    #[allow(dead_code)]
     pub(super) fn save_dimension_rule_overrides(&self) -> Result<(), String> {
         let path = self
             .world_root
