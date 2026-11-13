@@ -94,40 +94,78 @@ impl LevelShape {
     }
 }
 
-/// The shapes of a world's three levels, from its dimension types.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The shapes of a world's levels, from their dimension types.
+#[derive(Clone, Debug)]
 pub struct LevelShapes {
     pub overworld: LevelShape,
     pub nether: LevelShape,
     pub end: LevelShape,
+    custom: Option<std::sync::Arc<std::collections::HashMap<horizon_core::LevelKey, LevelShape>>>,
+    custom_facts: Option<std::sync::Arc<std::collections::HashMap<horizon_core::LevelKey, horizon_world::dimension_type::DimensionFacts>>>,
 }
 impl LevelShapes {
     pub const VANILLA: Self = Self {
         overworld: LevelShape::OVERWORLD,
         nether: LevelShape::NETHER,
         end: LevelShape::END,
+        custom: None,
+        custom_facts: None,
     };
-    /// The shape of the level `id` (`minecraft:overworld`,
-    /// `minecraft:the_nether`, `minecraft:the_end`); others get the
-    /// Overworld's.
+    /// The shape of the level `id`; unknown custom levels use the Overworld's.
     pub fn get(&self, id: &str) -> LevelShape {
         match id {
             "minecraft:the_nether" => self.nether,
             "minecraft:the_end" => self.end,
-            _ => self.overworld,
+            "minecraft:overworld" => self.overworld,
+            _ => horizon_core::LevelKey::parse(id)
+                .ok()
+                .and_then(|key| self.custom.as_ref()?.get(&key).copied())
+                .unwrap_or(self.overworld),
         }
     }
     pub fn get_mut(&mut self, id: &str) -> &mut LevelShape {
         match id {
             "minecraft:the_nether" => &mut self.nether,
             "minecraft:the_end" => &mut self.end,
-            _ => &mut self.overworld,
+            "minecraft:overworld" => &mut self.overworld,
+            _ => {
+                let Ok(key) = horizon_core::LevelKey::parse(id) else {
+                    return &mut self.overworld;
+                };
+                let default = self.overworld;
+                let custom = self.custom.get_or_insert_with(Default::default);
+                std::sync::Arc::make_mut(custom)
+                    .entry(key)
+                    .or_insert(default)
+            }
         }
+    }
+    pub fn set_custom_facts(
+        &mut self,
+        key: horizon_core::LevelKey,
+        facts: horizon_world::dimension_type::DimensionFacts,
+    ) {
+        std::sync::Arc::make_mut(self.custom_facts.get_or_insert_with(Default::default))
+            .insert(key, facts);
+    }
+    pub fn dimension_facts(&self, id: &str) -> Option<&horizon_world::dimension_type::DimensionFacts> {
+        let key = horizon_core::LevelKey::parse(id).ok()?;
+        self.custom_facts.as_ref()?.get(&key)
+    }
+    /// The dimension type registry key for a level id. A custom level without
+    /// an explicit stem uses the Overworld type.
+    pub fn dimension_type_id(&self, id: &str) -> &str {
+        self.dimension_facts(id)
+            .map(|facts| facts.id.as_str())
+            .unwrap_or_else(|| match id {
+                "minecraft:overworld" | "minecraft:the_nether" | "minecraft:the_end" => id,
+                _ => "minecraft:overworld",
+            })
     }
 }
 impl Default for LevelShapes {
     fn default() -> Self {
-        Self::VANILLA
+        Self::VANILLA.clone()
     }
 }
 

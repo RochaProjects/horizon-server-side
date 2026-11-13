@@ -33,6 +33,7 @@ impl Game<'_> {
             Dim::Overworld => Some(0),
             Dim::End => Some(1),
             Dim::Nether => None,
+            Dim::Custom(_) => Some(0),
         };
         let now = std::time::Instant::now();
         let seconds = self

@@ -27,6 +27,9 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.tag || github.ref }}
 
+      - name: Pin the checked out fork commit
+        run: echo "HORIZON_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,17 +49,18 @@ jobs:
       - name: Build AuraEssentials into the pinned Horizon engine
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          HORIZON_REPOSITORY: RochaProjects/horizon-server-side
           NATIVE_NO_DEFAULT_FEATURES: "1"
         run: |
           set -euo pipefail
-          python3 native/tools/native.py build auraessentials --horizon ac2603ed41953f1b8b791ca8396a0eb5147baea7 | tee native-build.json
+          python3 native/tools/native.py build auraessentials --horizon "$HORIZON_REVISION" | tee native-build.json
 
       - name: Build matching server tools and package the engine
         env:
           CARGO_TARGET_DIR: ${{ runner.temp }}/horizon-base-target
         run: |
           set -euo pipefail
-          source="native/target/horizon/ac2603ed41953f1b8b791ca8396a0eb5147baea7"
+          source="native/target/horizon/$HORIZON_REVISION"
           cargo build --manifest-path "$source/Cargo.toml" --locked --release -p horizon-server -p horizon-prepare
           mkdir -p dist/auraessentials-server
           cp "$CARGO_TARGET_DIR/release/horizon-server" dist/auraessentials-server/
@@ -64,7 +68,7 @@ jobs:
           cp "$source/research-lock.json" "$source/LICENSE" dist/auraessentials-server/
           cp native/target/cargo/fast/horizon-client dist/auraessentials-server/horizon-engine
           chmod +x dist/auraessentials-server/horizon-server dist/auraessentials-server/horizon-prepare dist/auraessentials-server/horizon-engine
-          printf '{"mod":"aura_essentials","version":"0.1.0","horizon":"ac2603ed41953f1b8b791ca8396a0eb5147baea7","minecraft":"26.3"}\n' > dist/auraessentials-server/auraessentials-release.json
+          printf '{"mod":"aura_essentials","version":"0.1.0","horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/auraessentials-release.json
           tar -czf dist/aura-essentials-server-linux-x86_64.tar.gz -C dist auraessentials-server
           sha256sum dist/aura-essentials-server-linux-x86_64.tar.gz > dist/aura-essentials-server-linux-x86_64.tar.gz.sha256
 

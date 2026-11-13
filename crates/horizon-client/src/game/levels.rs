@@ -7,10 +7,10 @@
 //! chunks by swapping it into place (`enter_level`), the way `as_guest` swaps a player
 //! in, so the tick code runs unchanged, one level at a time.
 //!
-//! Shared by every level, as vanilla's derived levels share the
-//! Overworld's level data: the game time, the day time and the weather, the
-//! game rules, the scoreboard, the maps and the entities waiting to arrive
-//! through a portal.
+//! Shared by every level: the game time, the day time and the weather, the
+//! vanilla game rules, the scoreboard, the maps and the entities waiting to
+//! arrive through a portal. Custom-dimension rule overrides are layered over
+//! the shared vanilla rules while that dimension is active.
 
 use super::{
     Dim, ExperienceOrb, FallingBlock, Game, ItemEntity, Mob, boats, commands,
@@ -326,7 +326,7 @@ impl Game<'_> {
             return Ok(());
         }
         let back = self.dim;
-        for dim in [Dim::Overworld, Dim::Nether, Dim::End] {
+        for dim in self.world_dimensions() {
             if dim == back || self.levels.parked.contains_key(&dim) {
                 continue;
             }
@@ -355,7 +355,7 @@ impl Game<'_> {
         let deadline = Instant::now() + Duration::from_secs(600);
         self.wait_for_ticket_chunks(deadline);
         let back = self.dim;
-        for dim in [Dim::Overworld, Dim::Nether, Dim::End] {
+        for dim in self.world_dimensions() {
             if dim != back && self.levels.parked.contains_key(&dim) {
                 self.enter_level(None, dim)?;
                 self.wait_for_ticket_chunks(deadline);
@@ -499,8 +499,8 @@ impl Game<'_> {
             p.world.day_time = self.world.day_time;
             p.world.end_clock = self.world.end_clock;
             p.world.weather = self.world.weather;
-            // The game rules and the difficulty are the server's, not a
-            // level's: natural regeneration holds in every dimension.
+            // Health flags are recalculated from the shared rules plus any
+            // custom-dimension override after the level swap.
             p.world.health_rules = self.world.health_rules;
             // The sculk tables' watched blocks are built once per game.
             p.world.watched = std::mem::take(&mut self.world.watched);
@@ -526,6 +526,8 @@ impl Game<'_> {
             p.idle = 0;
             let left = std::mem::replace(&mut self.dim, target);
             self.levels.parked.insert(left, p);
+            self.ui.rules = self.effective_rules_for_dimension(target.id());
+            self.sync_rules();
             if opened {
                 // The new streaming's radius and meshing options.
                 self.apply_settings();
@@ -636,11 +638,13 @@ impl Game<'_> {
                 Dim::Overworld => 1,
                 Dim::Nether => 2,
                 Dim::End => 3,
+                Dim::Custom(_) => 4,
             });
             let _level_span = horizon_client::spans::guard(match dim {
                 Dim::Overworld => "level_overworld",
                 Dim::Nether => "level_the_nether",
                 Dim::End => "level_the_end",
+                Dim::Custom(_) => "level_custom",
             });
             // The level's own share of the pass, outside its world tick: a slow tick's line names
             // each of them, and `level_tick` holds the world tick itself (#15349).
@@ -848,9 +852,74 @@ impl Game<'_> {
 
     /// The level whose id is exactly `id` (`MinecraftServer.getLevel` of a `ResourceKey`).
     pub(super) fn known_level(&self, id: &str) -> Option<Dim> {
-        [Dim::Overworld, Dim::Nether, Dim::End]
-            .into_iter()
-            .find(|d| d.id() == id)
+        self.world_dimensions().into_iter().find(|d| d.id() == id)
+    }
+
+    /// Vanilla dimensions plus custom dimensions with a directory in this save.
+    /// The directory layout is `dimensions/<namespace>/<path>`; recurse because
+    /// resource keys may contain paths such as `example:sky/high`.
+    pub(super) fn world_dimensions(&self) -> Vec<Dim> {
+        fn visit(
+            base: &std::path::Path,
+            current: &std::path::Path,
+            namespace: &str,
+            out: &mut Vec<Dim>,
+        ) {
+            let Ok(entries) = std::fs::read_dir(current) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let Ok(relative) = path.strip_prefix(base) else { continue };
+                    let segment = relative.to_string_lossy();
+                    let id = format!("{namespace}:{segment}");
+                    if let Ok(key) = horizon_core::LevelKey::parse(&id) {
+                        if path.join("region").exists() || path.join("data").exists() {
+                            out.push(Dim::from_id(key.id()));
+                        }
+                    }
+                    visit(base, &path, namespace, out);
+                }
+            }
+        }
+        let mut dims = vec![Dim::Overworld, Dim::Nether, Dim::End];
+        let root = self.world_root.join("dimensions");
+        if let Ok(namespaces) = std::fs::read_dir(root) {
+            for namespace in namespaces.flatten() {
+                if namespace.path().is_dir() {
+                    let name = namespace.file_name().to_string_lossy().into_owned();
+                    visit(&namespace.path(), &namespace.path(), &name, &mut dims);
+                }
+            }
+        }
+        dims.extend(self.levels.parked.keys().copied());
+        dims.push(self.dim);
+        dims.extend(self.mod_chunk_tickets.keys().copied());
+        dims.extend(self.player_bed_levels());
+        dims.extend(self.mod_container_viewers.keys().filter_map(|(id, _)| {
+            let dim = Dim::from_id(id);
+            (dim.id() == *id).then_some(dim)
+        }));
+        if let Some(host) = &self.lan {
+            dims.extend(host.hub.guests.iter().filter_map(|g| {
+                let dim = Dim::from_id(&g.dimension);
+                (dim.id() == g.dimension).then_some(dim)
+            }));
+        }
+        dims.sort_by_key(|d| {
+            (
+                match d {
+                    Dim::Overworld => 0,
+                    Dim::Nether => 1,
+                    Dim::End => 2,
+                    Dim::Custom(_) => 3,
+                },
+                d.id(),
+            )
+        });
+        dims.dedup();
+        dims
     }
 
     /// The levels this server tick runs, in `MinecraftServer.levels` order
@@ -861,7 +930,8 @@ impl Game<'_> {
             .lan
             .as_ref()
             .map_or(&[][..], |h| h.hub.guests.as_slice());
-        let mut dims: Vec<Dim> = [Dim::Overworld, Dim::Nether, Dim::End]
+        let mut dims: Vec<Dim> = self
+            .world_dimensions()
             .into_iter()
             .filter(|d| {
                 // `/forceload`ed chunks, or a native mod's tickets.
@@ -966,6 +1036,40 @@ impl Game<'_> {
             self.native_level_closed(dim);
         }
         Ok(())
+    }
+
+    /// Saves and closes an idle parked dimension for a native world manager.
+    /// Refuses the active level or any level still held by a player or ticket.
+    pub(super) fn native_unload_dimension(&mut self, id: &str) -> bool {
+        let dim = Dim::from_id(id);
+        if dim.id() != id || dim == Dim::Overworld || dim == self.dim {
+            return false;
+        }
+        if !self.levels.parked.contains_key(&dim) {
+            return true;
+        }
+        if self.levels_to_tick().contains(&dim) || self.vehicle_waits_in(dim) {
+            return false;
+        }
+        let back = self.dim;
+        if self.enter_level(None, dim).is_err() {
+            return false;
+        }
+        let chunks: Vec<_> = self.world.chunks.values().cloned().collect();
+        self.native_chunks_changed(&chunks);
+        if self.save_level(true).is_err() {
+            let _ = self.enter_level(None, back);
+            return false;
+        }
+        for uuid in self.persist.uuids.values() {
+            self.entity_attachments.remove(uuid);
+        }
+        if self.enter_level(None, back).is_err() {
+            return false;
+        }
+        self.levels.parked.remove(&dim);
+        self.native_level_closed(dim);
+        true
     }
 
     /// The mods hear `dim`'s level open (`LevelEvent.Load`), on a server.

@@ -162,6 +162,30 @@ name = "smp_presence"
 source = "smp_presence.rs"
 
 [[module]]
+id = "holograms"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_holograms"
+source = "smp_holograms.rs"
+
+[[module]]
+id = "crates"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_crates"
+source = "smp_crates.rs"
+
+[[module]]
+id = "npcs"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_npcs"
+source = "smp_npcs.rs"
+
+[[module]]
+id = "npc_glue"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_npc_glue"
+source = "smp_npc_glue.rs"
+
+[[module]]
 id = "claims"
 file = "crates/horizon-client/src/game.rs"
 name = "smp_claims"
@@ -196,6 +220,12 @@ id = "switch"
 file = "crates/horizon-client/src/game.rs"
 name = "smp_switch"
 source = "smp_switch.rs"
+
+[[module]]
+id = "worlds"
+file = "crates/horizon-client/src/game.rs"
+name = "smp_worlds"
+source = "smp_worlds.rs"
 
 [[module]]
 id = "glue"
@@ -527,6 +557,28 @@ bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "player", ty = "u128", value = "player" },
   { name = "name", ty = "&str", value = "name" },
+]
+
+[[injection]]
+id = "player_logged_in"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_player_logged_in"
+helper = "player_logged_in.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+]
+
+[[injection]]
+id = "resource_pack_status"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_resource_pack_status_v2"
+helper = "resource_pack_status.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "pack", ty = "u128", value = "pack" },
+  { name = "status", ty = "i32", value = "status" },
 ]
 
 [[injection]]

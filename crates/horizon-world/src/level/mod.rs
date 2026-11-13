@@ -174,6 +174,7 @@ pub enum Dimension {
     Overworld,
     Nether,
     End,
+    Custom(LevelKey),
 }
 
 impl Dimension {
@@ -183,15 +184,17 @@ impl Dimension {
             Self::Overworld => LevelKey::OVERWORLD,
             Self::Nether => LevelKey::NETHER,
             Self::End => LevelKey::END,
+            Self::Custom(key) => key,
         }
     }
 
-    /// The dimension of a level key; custom levels map to the Overworld.
+    /// The dimension of a level key, retaining custom registry ids.
     pub fn of_level(key: LevelKey) -> Self {
         match key {
             LevelKey::NETHER => Self::Nether,
             LevelKey::END => Self::End,
-            _ => Self::Overworld,
+            LevelKey::OVERWORLD => Self::Overworld,
+            other => Self::Custom(other),
         }
     }
 }
@@ -1526,7 +1529,7 @@ mod dimension_key_tests {
             assert_eq!(vanilla_sea_level(key), sea);
         }
         let custom = LevelKey::parse("example:sky").unwrap();
-        assert_eq!(Dimension::of_level(custom), Dimension::Overworld);
+        assert_eq!(Dimension::of_level(custom), Dimension::Custom(custom));
         assert_eq!(vanilla_sea_level(custom), 63);
     }
 }

@@ -19,11 +19,10 @@ pub(super) enum NativeMove {
     Respawn,
 }
 
-/// The level a mod names, of the three a server keeps.
+/// A built-in or valid custom dimension id.
 fn native_dim(id: &str) -> Option<Dim> {
-    [Dim::Overworld, Dim::Nether, Dim::End]
-        .into_iter()
-        .find(|d| d.id() == id)
+    let dim = Dim::from_id(id);
+    (dim.id() == id).then_some(dim)
 }
 
 /// `/tp`'s world bounds (`Level.isInSpawnableBounds`).
@@ -50,8 +49,9 @@ impl Game<'_> {
     /// players' packets of the server tick (the same tick when the hook heard a packet). Into
     /// another level it happens when the tick's level teleports run, as a command's does. True
     /// when it is done or queued; false for a player not on the server or dead (when that can
-    /// be seen), a dimension other than the three, a position outside `/tp`'s bounds, an angle
-    /// that is not finite, and on a client. API @API:teleport_player@.
+    /// be seen), an invalid dimension id, a position outside `/tp`'s bounds, an angle
+    /// that is not finite, and on a client. A valid custom id opens its own save and uses the
+    /// Overworld generator when no data-pack stem defines one. API @API:teleport_player@.
     pub(super) fn native_teleport_player(
         &mut self,
         uuid: u128,

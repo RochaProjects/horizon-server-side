@@ -272,6 +272,11 @@ impl WorldRequest {
         let dim = Dim::from_id(&level.dimension);
         let shapes = level_shapes(&save_root, res.biomes());
         let shape = shapes.get(dim.id());
+        let dimension_facts = shapes
+            .dimension_facts(dim.id())
+            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(
+                horizon_core::LevelKey::builtin_or_overworld(dim.id()),
+            ));
         let streaming_step = startup::step("world.make_streaming");
         let (mut streaming, save, locator) = make_streaming(
             res,
@@ -281,6 +286,7 @@ impl WorldRequest {
             &save_root,
             dim,
             shape,
+            dimension_facts,
             level.seed,
             &level.enabled_features,
         )?;
@@ -289,10 +295,7 @@ impl WorldRequest {
         let mut world = World::new(res.facts().air, level.seed);
         world.attachments = save.load_attachments();
         world.shape = shape;
-        world.fast_lava = horizon_world::dimension_type::DimensionFacts::of_builtin_level(
-            horizon_core::LevelKey::builtin_or_overworld(dim.id()),
-        )
-        .fast_lava;
+        world.fast_lava = dimension_facts.fast_lava;
         world.game_time = level.time;
         world.day_time = options.time.unwrap_or(level.day_time);
         world.end_clock = level.end_clock.unwrap_or(level.time);
@@ -688,26 +691,31 @@ pub(super) fn level_shapes(
     let (overrides, _) =
         horizon_client::datapack::worldgen_overrides(&enabled, |b| biomes.contains(b));
     // The sea levels of the noise settings the packs replace, for this world only.
-    horizon_world::level::set_sea_levels(
-        [
+    let dimension_ids: Vec<String> = [
             "minecraft:overworld",
             "minecraft:the_nether",
             "minecraft:the_end",
         ]
         .into_iter()
+        .map(str::to_owned)
+        .chain(overrides.dimension_ids().map(str::to_owned))
+        .collect();
+    horizon_world::level::set_sea_levels(
+        dimension_ids
+        .iter()
         .filter_map(|level| {
             Some((
-                horizon_core::LevelKey::builtin_or_overworld(level),
+                horizon_core::LevelKey::parse(level).ok()?,
                 overrides.level_sea_level(level)?,
             ))
         })
         .collect(),
     );
-    for level in [
-        "minecraft:overworld",
-        "minecraft:the_nether",
-        "minecraft:the_end",
-    ] {
+    for level in dimension_ids.iter().map(String::as_str) {
+        if horizon_core::LevelKey::parse(level).is_err() {
+            log::warn!("Horizon: ignoring invalid data pack dimension id {level}");
+            continue;
+        }
         let shape = overrides.level_height(level).and_then(|h| {
             LevelShape::new(
                 h.min_y,
@@ -726,7 +734,103 @@ pub(super) fn level_shapes(
             ),
         }
     }
+    // Dimension stems point at dimension type registry entries. Keep the
+    // complete gameplay facts per level id so custom levels do not silently
+    // inherit Overworld weather, sleep, portal, or coordinate rules.
+    for level in overrides.dimension_ids() {
+        let Some(stem) = overrides.dimension_stem(level) else {
+            continue;
+        };
+        let dimension_type = &stem["type"];
+        let facts = match dimension_type {
+            serde_json::Value::String(type_id) => {
+                if let Some(json) = overrides.dimension_type_json(type_id) {
+                    horizon_world::dimension_type::DimensionFacts::from_json(
+                        type_id,
+                        &json,
+                        &|tag| timeline_tag_ids(&enabled, tag, 0),
+                    )
+                } else if let Some(facts) =
+                    horizon_world::dimension_type::DimensionFacts::vanilla(type_id)
+                {
+                    Ok(facts.clone())
+                } else {
+                    continue;
+                }
+            }
+            serde_json::Value::Object(_) => horizon_world::dimension_type::DimensionFacts::from_json(
+                level,
+                dimension_type,
+                &|tag| timeline_tag_ids(&enabled, tag, 0),
+            ),
+            _ => continue,
+        };
+        let (Ok(key), Ok(facts)) = (horizon_core::LevelKey::parse(level), facts) else {
+            log::warn!("Horizon: ignoring invalid custom dimension type for {level}");
+            continue;
+        };
+        let type_id = facts.id.clone();
+        if let Some(shape) = horizon_client::chunk::LevelShape::new(
+            facts.height.min_y,
+            facts.height.height,
+            facts.height.logical_height,
+            facts.height.has_skylight,
+            facts.height.has_ceiling,
+        )
+        .ok()
+        {
+            *shapes.get_mut(level) = shape;
+            if horizon_core::LevelKey::parse(&type_id).is_ok() {
+                *shapes.get_mut(&type_id) = shape;
+            }
+        }
+        shapes.set_custom_facts(key, facts);
+    }
     shapes
+}
+
+/// Expands a timeline tag from the enabled pack stack (lower priority first).
+fn timeline_tag_ids(packs: &[&horizon_client::datapack::DataPack], tag: &str, depth: u8) -> Vec<String> {
+    if depth >= 8 {
+        return Vec::new();
+    }
+    let tag = tag.strip_prefix('#').unwrap_or(tag);
+    let (namespace, path) = tag.split_once(':').unwrap_or(("minecraft", tag));
+    let file = format!("data/{namespace}/tags/timeline/{path}.json");
+    let mut result = Vec::new();
+    for pack in packs {
+        let Some(json) = pack
+            .read(&file)
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        else {
+            continue;
+        };
+        if json["replace"].as_bool().unwrap_or(false) {
+            result.clear();
+        }
+        let Some(values) = json["values"].as_array() else {
+            continue;
+        };
+        for value in values {
+            let Some(id) = value
+                .as_str()
+                .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
+            else {
+                continue;
+            };
+            let entries = if id.starts_with('#') {
+                timeline_tag_ids(packs, id, depth + 1)
+            } else {
+                vec![id.to_owned()]
+            };
+            for entry in entries {
+                if !result.contains(&entry) {
+                    result.push(entry);
+                }
+            }
+        }
+    }
+    result
 }
 
 pub(super) fn make_streaming(
@@ -737,6 +841,7 @@ pub(super) fn make_streaming(
     world_root: &std::path::Path,
     dim: Dim,
     shape: horizon_client::chunk::LevelShape,
+    dimension_facts: &horizon_world::dimension_type::DimensionFacts,
     seed: i64,
     enabled_features: &[String],
 ) -> Result<(Streaming, Arc<SaveDir>, Option<Arc<VanillaTerrain>>)> {
@@ -974,12 +1079,9 @@ pub(super) fn make_streaming(
         .horizon
         .leaf_culling_effective(&settings.resource_packs);
     streaming.biome_zoom = BiomeZoom::new(obfuscate_seed(seed));
-    let facts = horizon_world::dimension_type::DimensionFacts::of_builtin_level(
-        horizon_core::LevelKey::builtin_or_overworld(dim.id()),
-    );
-    streaming.sky_light = facts.height.has_skylight;
-    streaming.nether_shading =
-        facts.cardinal_light == horizon_world::dimension_type::CardinalLight::Nether;
+    streaming.sky_light = dimension_facts.height.has_skylight;
+    streaming.nether_shading = dimension_facts.cardinal_light
+        == horizon_world::dimension_type::CardinalLight::Nether;
     // A server draws nothing: neither the integrated server nor the
     // dedicated one meshes sections.
     streaming.mesh = options.execution_role.is_client();

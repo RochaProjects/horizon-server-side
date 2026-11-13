@@ -783,6 +783,7 @@ struct GameLevel<'w> {
     collision: &'w BlockCollisionRegistry<'w>,
     events: &'w mut Vec<LevelEvent>,
     dimension: LevelDimension,
+    dimension_facts: &'w horizon_world::dimension_type::DimensionFacts,
     darken: i32,
     /// The environment of the level's dimension (`SUN_ANGLE`).
     environment: &'w Environment,
@@ -1038,6 +1039,9 @@ impl GameLevel<'_> {
     }
 }
 impl LevelAccess for GameLevel<'_> {
+    fn dimension_type(&self) -> &horizon_world::dimension_type::DimensionFacts {
+        self.dimension_facts
+    }
     fn within_world_border(&self, pos: BlockPos) -> bool {
         self.border
             .is_within_bounds(f64::from(pos.x), f64::from(pos.z), 0.0)
@@ -3166,6 +3170,7 @@ enum Dim {
     Overworld,
     Nether,
     End,
+    Custom(horizon_core::LevelKey),
 }
 impl Dim {
     fn id(self) -> &'static str {
@@ -3173,13 +3178,17 @@ impl Dim {
             Self::Overworld => "minecraft:overworld",
             Self::Nether => "minecraft:the_nether",
             Self::End => "minecraft:the_end",
+            Self::Custom(key) => key.id(),
         }
     }
     fn from_id(id: &str) -> Self {
         match id {
             "minecraft:the_nether" => Self::Nether,
             "minecraft:the_end" => Self::End,
-            _ => Self::Overworld,
+            "minecraft:overworld" => Self::Overworld,
+            _ => horizon_core::LevelKey::parse(id)
+                .map(Self::Custom)
+                .unwrap_or(Self::Overworld),
         }
     }
     /// The level's shape in a world of vanilla's dimension types.
@@ -3189,6 +3198,7 @@ impl Dim {
             Self::Overworld => LevelShape::OVERWORLD,
             Self::Nether => LevelShape::NETHER,
             Self::End => LevelShape::END,
+            Self::Custom(_) => LevelShape::OVERWORLD,
         }
     }
 }
@@ -3335,18 +3345,22 @@ impl Game<'_> {
     /// ceiling) and the End, which vanilla names by id. Every rain, thunder
     /// and lightning rule asks this, never the dimension's id.
     fn level_key(&self) -> horizon_core::LevelKey {
-        horizon_core::LevelKey::builtin_or_overworld(self.dim.id())
+        horizon_core::LevelKey::parse(self.dim.id()).unwrap_or(horizon_core::LevelKey::OVERWORLD)
     }
-    fn dimension_type(&self) -> &'static horizon_world::dimension_type::DimensionFacts {
-        horizon_world::dimension_type::DimensionFacts::of_builtin_level(self.level_key())
+    fn dimension_type(&self) -> &horizon_world::dimension_type::DimensionFacts {
+        self.level_shapes
+            .dimension_facts(self.dim.id())
+            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(self.level_key()))
     }
     fn dimension_type_of(
         &self,
         dim: Dim,
-    ) -> &'static horizon_world::dimension_type::DimensionFacts {
-        horizon_world::dimension_type::DimensionFacts::of_builtin_level(
-            horizon_core::LevelKey::builtin_or_overworld(dim.id()),
-        )
+    ) -> &horizon_world::dimension_type::DimensionFacts {
+        self.level_shapes
+            .dimension_facts(dim.id())
+            .unwrap_or_else(|| horizon_world::dimension_type::DimensionFacts::of_builtin_level(
+                horizon_core::LevelKey::builtin_or_overworld(dim.id()),
+            ))
     }
     fn eye_position(&self) -> Option<[f64; 3]> {
         let p = self.player.as_ref()?;
@@ -3843,6 +3857,7 @@ impl Game<'_> {
             Dim::Overworld => LevelDimension::Overworld,
             Dim::Nether => LevelDimension::Nether,
             Dim::End => LevelDimension::End,
+            Dim::Custom(key) => LevelDimension::Custom(key),
         };
         let rules = self.level_rules();
         let fire_players: Vec<[f64; 3]> = self
@@ -3898,7 +3913,13 @@ impl Game<'_> {
             golem_chests.extend(self.chest_other_half(key));
         }
         let native_authoritative = self.native_authoritative();
-        let environment_type = self.dimension_type();
+        let dimension_facts = self
+            .level_shapes
+            .dimension_facts(self.dim.id())
+            .unwrap_or_else(|| {
+                horizon_world::dimension_type::DimensionFacts::of_builtin_level(self.level_key())
+            });
+        let environment_id = self.dimension_type().id.clone();
         let mut level = GameLevel {
             gateway_servers: &mut self.be_anims.gateway_servers,
             border: self.border.geometry(),
@@ -3920,8 +3941,9 @@ impl Game<'_> {
             collision: self.collision,
             events: &mut self.level_events,
             dimension,
+            dimension_facts,
             darken,
-            environment: self.res.environment_of(&environment_type.id),
+            environment: self.res.environment_of(&environment_id),
             raining: rain > 0.2,
             thundering: thunder > 0.9,
             player_box,
@@ -8722,7 +8744,7 @@ impl Game<'_> {
             .as_ref()
             .map(|p| p.spawn_extra_particles_on_fall);
         // Level.write saves the game rules (game_rules.dat) with the rest.
-        self.level.game_rules = self.ui.rules.by_name();
+        self.level.game_rules = self.ui.global_rules.by_name();
         // PrimaryLevelData.setDifficulty: /difficulty and the options button change it.
         self.level.difficulty =
             horizon_client::title::DIFFICULTIES[usize::from(self.ui.difficulty) & 3].into();
@@ -9187,6 +9209,7 @@ impl Game<'_> {
                     Dim::Overworld => "minecraft:overworld",
                     Dim::Nether => "minecraft:the_nether",
                     Dim::End => "minecraft:the_end",
+                    Dim::Custom(key) => key.id(),
                 }
                 .to_owned(),
                 player: self.player.as_ref().map_or(camera.to_array(), |p| {

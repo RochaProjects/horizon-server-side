@@ -931,6 +931,7 @@ impl Game<'_> {
         match self.dim {
             super::Dim::Nether => "minecraft:the_nether",
             super::Dim::End => "minecraft:the_end",
+            super::Dim::Custom(key) => key.id(),
             _ => "minecraft:overworld",
         }
     }

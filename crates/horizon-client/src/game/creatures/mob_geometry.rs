@@ -45,6 +45,7 @@ impl Game<'_> {
                 Dim::Overworld => 0.0,
                 Dim::Nether => -1.0,
                 Dim::End => 1.0,
+                Dim::Custom(_) => 0.0,
             },
             player: self.player.as_ref().map_or(camera.to_array(), |p| {
                 [p.position.x, p.position.y, p.position.z]

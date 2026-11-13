@@ -8,7 +8,7 @@ use horizon_world::{
 };
 use std::{collections::BTreeMap, fs, path::Path};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     Bool(bool),
     Int(i32),

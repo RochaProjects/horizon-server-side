@@ -7,4 +7,5 @@ fn smp_interact_entity(
     claimed: &mut bool,
 ) {
     crate::game::smp_claims_glue::interact_entity(game, entity, kind, claimed);
+    crate::game::smp_npc_glue::interact_entity(game, entity, kind, claimed);
 }

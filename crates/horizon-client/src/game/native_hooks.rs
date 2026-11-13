@@ -10010,6 +10010,7 @@ pub(super) fn dimension_id(dimension: LevelDimension) -> &'static str {
         LevelDimension::Overworld => "minecraft:overworld",
         LevelDimension::Nether => "minecraft:the_nether",
         LevelDimension::End => "minecraft:the_end",
+        LevelDimension::Custom(key) => key.id(),
     }
 }
 
@@ -10675,8 +10676,9 @@ impl Game<'_> {
             "minecraft:overworld" => super::Dim::Overworld,
             "minecraft:the_nether" => super::Dim::Nether,
             "minecraft:the_end" => super::Dim::End,
-            _ => return None,
+            _ => super::Dim::from_id(dimension),
         };
+        if dim.id() != dimension { return None; }
         if dim == self.dim {
             Some(&mut *self.world.random)
         } else {

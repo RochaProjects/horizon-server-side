@@ -717,7 +717,10 @@ impl Hub {
             .id("minecraft:chat_type", "minecraft:chat")
             .unwrap_or(0);
         let dimension_type = sync
-            .id("minecraft:dimension_type", &config.dimension)
+            .id(
+                "minecraft:dimension_type",
+                config.levels.dimension_type_id(&config.dimension),
+            )
             .unwrap_or(0);
         let clock_ids = (0..sync.dynamic.len("minecraft:world_clock") as i32).collect();
         let mut encoder = encoder;
@@ -4985,7 +4988,10 @@ impl Hub {
         self.config.dimension = dimension.to_owned();
         self.dimension_type = self
             .sync
-            .id("minecraft:dimension_type", dimension)
+            .id(
+                "minecraft:dimension_type",
+                self.config.levels.dimension_type_id(dimension),
+            )
             .unwrap_or(0);
         self.encoder
             .set_dimension(self.config.levels.get(dimension));

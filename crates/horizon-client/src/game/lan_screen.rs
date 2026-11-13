@@ -716,10 +716,10 @@ impl Game<'_> {
             return;
         }
         for (name, value) in changes {
-            self.ui.rules.set(name, value);
+            let Some(rule) = horizon_client::gamerules::rule(name) else { continue };
+            self.set_game_rule(rule, value);
             self.system_message(Text::tr("commands.gamerule.set", &[&name, &value]));
         }
-        self.sync_rules();
     }
 
     pub(super) fn draw_world_options(&mut self, batch: &mut HudBatch) {
@@ -1223,7 +1223,7 @@ impl Game<'_> {
                     o.rules = None;
                     self.send(S::ClientCommand(play::ClientCommand { action: 2 }));
                 } else {
-                    o.rules = Some(RulesScreen::new(&self.ui.rules));
+                    o.rules = Some(RulesScreen::new(&self.ui.global_rules));
                 }
                 o.view = View::GameRules;
             }
@@ -1535,7 +1535,7 @@ impl Game<'_> {
                                 o.rules = None;
                                 self.send(S::ClientCommand(play::ClientCommand { action: 2 }));
                             } else {
-                                o.rules = Some(RulesScreen::new(&self.ui.rules));
+                            o.rules = Some(RulesScreen::new(&self.ui.global_rules));
                             }
                             o.view = View::GameRules;
                         }

@@ -74,7 +74,7 @@ impl Default for Config {
 /// A place in a level.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Place {
-    /// `minecraft:overworld`, `minecraft:the_nether`, `minecraft:the_end`.
+    /// Any valid vanilla or custom dimension ID, for example `auraessentials:mina`.
     pub dimension: String,
     pub x: f64,
     pub y: f64,

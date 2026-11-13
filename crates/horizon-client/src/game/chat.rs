@@ -248,6 +248,11 @@ pub struct UiState {
     /// The chat screen is `InBedChatScreen`: the sleeper's, with a Leave Bed button.
     pub in_bed_chat: bool,
     pub registries: Registries,
+    /// Server-wide vanilla rules (`data/minecraft/game_rules.dat`).
+    pub global_rules: GameRules,
+    /// Optional overrides for custom dimensions, stored in the world save.
+    pub dimension_rule_overrides: BTreeMap<String, BTreeMap<String, horizon_client::gamerules::Value>>,
+    /// Rules currently effective in `Game::dim`: global values plus a custom-dimension override.
     pub rules: GameRules,
     pub clock: WorldClock,
     /// Command state for registered clocks other than Overworld. Overworld's
@@ -1907,11 +1912,43 @@ impl Game<'_> {
             _ => Difficulty::Normal,
         };
     }
+    pub(super) fn effective_rules_for_dimension(&self, dimension: &str) -> GameRules {
+        let mut rules = self.ui.global_rules.clone();
+        if let Some(overrides) = self.ui.dimension_rule_overrides.get(dimension) {
+            for (name, value) in overrides {
+                rules.set(name, *value);
+            }
+        }
+        rules
+    }
+    pub(super) fn save_dimension_rule_overrides(&self) -> Result<(), String> {
+        let path = self.world_root.join("data/horizon/dimension_game_rules.json");
+        let Some(parent) = path.parent() else { return Err("Pasta de dados do mundo inválida.".into()) };
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let bytes = serde_json::to_vec_pretty(&self.ui.dimension_rule_overrides).map_err(|e| e.to_string())?;
+        std::fs::write(path, bytes).map_err(|e| e.to_string())
+    }
+    pub(super) fn load_dimension_rule_overrides(&mut self) {
+        let path = self.world_root.join("data/horizon/dimension_game_rules.json");
+        self.ui.dimension_rule_overrides = std::fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default();
+        for overrides in self.ui.dimension_rule_overrides.values_mut() {
+            overrides.remove("advance_time");
+            overrides.remove("advance_weather");
+        }
+        self.ui.dimension_rule_overrides.retain(|id, values| {
+            !id.starts_with("minecraft:") && !values.is_empty()
+        });
+    }
     /// `ServerClockManager.ServerClockInstance.loadFrom`: restore the existing
     /// Overworld state when a world opens; clear the other command-state cache.
     pub(super) fn load_world_state(&mut self) {
-        self.ui.rules =
+        self.ui.global_rules =
             GameRules::load_with_features(&self.world_root, &self.level.enabled_features);
+        self.load_dimension_rule_overrides();
+        self.ui.rules = self.effective_rules_for_dimension(self.dim.id());
         self.ui.clock = WorldClock::default();
         self.ui.command_clocks.clear();
         // PrimaryLevelData: the difficulty comes back from level.dat's difficulty_settings.
@@ -1951,6 +1988,9 @@ impl Game<'_> {
         }
         use horizon_world::nbt::Tag;
         let c = self.ui.clock;
+        if let Err(e) = self.ui.global_rules.save(&self.world_root) {
+            log::warn!("the game rules were not written: {e}");
+        }
         // The other clocks stay as saved; the overworld one keeps the fields Horizon
         // does not model, and (like vanilla's codec) omits rate, partial tick and
         // pause while they have their defaults.

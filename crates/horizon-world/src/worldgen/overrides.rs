@@ -172,6 +172,21 @@ impl WorldgenOverrides {
     pub fn templates(&self) -> &BTreeMap<String, Arc<[u8]>> {
         &self.templates
     }
+    /// Dimension ids introduced or replaced by enabled data packs.
+    pub fn dimension_ids(&self) -> impl Iterator<Item = &str> {
+        self.entries
+            .get(DIMENSIONS)
+            .into_iter()
+            .flat_map(|dimensions| dimensions.keys().map(String::as_str))
+    }
+    /// The highest-priority level stem registered by a data pack.
+    pub fn dimension_stem(&self, id: &str) -> Option<serde_json::Value> {
+        self.entries.get(DIMENSIONS)?.get(id).and_then(|s| serde_json::from_str(s).ok())
+    }
+    /// The highest-priority dimension type registered by a data pack.
+    pub fn dimension_type_json(&self, id: &str) -> Option<serde_json::Value> {
+        self.entries.get(DIMENSION_TYPES)?.get(id).and_then(|s| serde_json::from_str(s).ok())
+    }
     /// A pack's file for `id` in `bundle`: called for packs from the lowest
     /// to the highest, so the last call for an id wins.
     pub fn set(&mut self, bundle: &str, id: &str, json: String) {

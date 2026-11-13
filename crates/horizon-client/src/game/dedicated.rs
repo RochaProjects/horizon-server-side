@@ -1145,8 +1145,8 @@ impl Game<'_> {
         // DedicatedServer.initServer: a legacy `announce-player-achievements`
         // sets the show_advancement_messages rule once, as the file is read.
         if let Some(announce) = props.announce_player_achievements {
-            self.ui.rules.set(
-                "show_advancement_messages",
+            self.set_game_rule(
+                &horizon_client::gamerules::rule("show_advancement_messages").unwrap(),
                 horizon_client::gamerules::Value::Bool(announce),
             );
         }
@@ -1230,7 +1230,7 @@ impl Game<'_> {
             code_of_conducts,
             // DedicatedServer.serverLinks: `bug-report-link` as the only link
             // (ServerLinks.KnownLinkType.BUG_REPORT is id 0).
-            levels: self.level_shapes,
+            levels: self.level_shapes.clone(),
             horizon_clients_only: props
                 .raw
                 .get(horizon_client::lan::HORIZON_CLIENTS_ONLY)
@@ -1269,7 +1269,7 @@ impl Game<'_> {
             view_distance: props.view_distance.clamp(2, 32),
             simulation_distance: props.simulation_distance.clamp(2, 32),
             dimension: self.dim.id().to_owned(),
-            levels: self.level_shapes,
+            levels: self.level_shapes.clone(),
             seed: self.level.seed,
             max_players: props.max_players.max(0) as usize,
             integrated: false,

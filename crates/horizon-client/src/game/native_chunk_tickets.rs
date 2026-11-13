@@ -191,12 +191,8 @@ impl Game<'_> {
     }
 }
 
-/// The level a dimension id names, for the three Horizon has.
+/// The level a dimension id names.
 fn native_dim(dimension: &str) -> Option<Dim> {
-    match dimension {
-        "minecraft:overworld" => Some(Dim::Overworld),
-        "minecraft:the_nether" => Some(Dim::Nether),
-        "minecraft:the_end" => Some(Dim::End),
-        _ => None,
-    }
+    let dim = Dim::from_id(dimension);
+    (dim.id() == dimension).then_some(dim)
 }

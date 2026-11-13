@@ -32,7 +32,7 @@ from pathlib import Path
 
 NATIVE = Path(__file__).resolve().parents[1]
 TARGET = NATIVE / "target"
-REPO = "horizon-rust/horizon"
+REPO = os.environ.get("HORIZON_REPOSITORY", "horizon-rust/horizon")
 HOOKS_FILE = "crates/horizon-client/src/game/native_hooks.rs"
 HOOKS_LINE = re.compile(r"^pub\(crate\) const NATIVE_HOOKS_API: u32 = (\d+);$", re.M)
 

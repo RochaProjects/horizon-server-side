@@ -3647,7 +3647,17 @@ impl OverworldGenerator {
                     .get(preset)
                     .ok_or_else(|| resource(format!("missing world preset {preset}")))?,
             )?;
-            preset_json["dimensions"][dimension].clone()
+            let selected = &preset_json["dimensions"][dimension];
+            if !selected.is_null() {
+                selected.clone()
+            } else if horizon_core::LevelKey::parse(dimension).is_ok() {
+                // A valid custom dimension id without a data-pack stem gets
+                // the Overworld generator and type, while retaining its own
+                // save directory and runtime identity.
+                preset_json["dimensions"]["minecraft:overworld"].clone()
+            } else {
+                Value::Null
+            }
         };
         let generator = stem["generator"].clone();
         // The level's build range: its dimension type's, a data pack's

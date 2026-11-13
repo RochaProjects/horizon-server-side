@@ -1287,6 +1287,40 @@ impl Game<'_> {
             count,
         )
     }
+    /// Takes `count` from the acting player's main-hand stack only when its
+    /// item, damage and components match `expected`. Unlike
+    /// `native_take_items`, this supports mod items with custom components.
+    /// False when another player's inventory is not in reach or the held
+    /// stack changed. Used by native server mods for physical keys.
+    pub(super) fn native_take_matching_held(
+        &mut self,
+        uuid: u128,
+        expected: &ItemStack,
+        count: u32,
+    ) -> bool {
+        if count == 0 || !self.acting(uuid) {
+            return false;
+        }
+        let selected = self.selected;
+        let Some(slot) = self.inventory.get_mut(selected) else {
+            return false;
+        };
+        let Some(stack) = slot.as_mut() else {
+            return false;
+        };
+        if stack.item != expected.item
+            || stack.damage != expected.damage
+            || stack.extra != expected.extra
+            || stack.count < count
+        {
+            return false;
+        }
+        stack.count -= count;
+        if stack.count == 0 {
+            *slot = None;
+        }
+        true
+    }
     /// How many plain `item` still fit; 0 for an unknown item.
     pub(super) fn native_room_for(&mut self, item: &str) -> u32 {
         let Some(max) = self.res.items().get(item).map(|i| i.max_stack) else {

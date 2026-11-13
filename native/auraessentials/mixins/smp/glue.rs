@@ -19,20 +19,26 @@ use crate::game::{
     smp_casino::{self, Casino},
     smp_casino_glue,
     smp_claims::{self, Claims},
+    smp_crates::{self, CrateBlock, Kind as CrateKind, Reward},
     smp_economy::{self, Economy, Out, Player},
     smp_games::{self, Games},
+    smp_holograms::{self, Hologram},
     smp_lottery::Lottery,
     smp_places::{self, Body, Place, Places},
     smp_presence::{self, Presence},
+    smp_resource_pack::{self, Config as ResourcePackConfig},
     native_menus::native_menu_inventory_slot,
     smp_market::{self, Bag, Market},
     smp_market_chart, smp_market_menu, smp_market_prices,
     smp_nick::{self, Names as _, Nicks},
+    smp_npcs,
+    smp_npc_glue,
     smp_shop::{self, Shop},
     smp_store,
     smp_switch::{self, Part, Switches},
     smp_trade::{self, Act, Cell, Trades},
     smp_vanish::{self, Vanish},
+    smp_worlds,
 };
 use horizon_client::{
     items::ItemStack,
@@ -113,6 +119,12 @@ pub struct Smp {
     lottery: Lottery,
     /// The casino's menus and rounds.
     casino: Casino,
+    /// The open keybox menus: player -> (window, key type).
+    crate_views: std::collections::HashMap<u128, (i32, CrateKind, String, [i32; 3])>,
+    /// A weighted reward already selected; the chest spins until its timer ends.
+    crate_openings: std::collections::HashMap<u128, CrateOpening>,
+    /// Admin click action: next block click defines Some(kind) or removes None.
+    crate_pending: std::collections::HashMap<u128, Option<CrateKind>>,
     /// An error when `places.json` can't be read: the commands say so.
     places: Result<Places, String>,
     /// An error when `claims.json` can't be read: nothing is guarded then,
@@ -143,9 +155,24 @@ pub struct Smp {
     /// Where each player last left (`/auraadmin lastpos`): an error when
     /// `last_positions.json` can't be read (nothing is kept then).
     last: Result<LastPositions, String>,
+    /// Pacote Java editável em resource-pack.json.
+    resource_pack: Result<ResourcePackConfig, String>,
     /// Where each player on stood at the last second's look: written to
     /// `last` when they leave (they are off the player list by then).
     standing: std::collections::HashMap<u128, Place>,
+}
+
+struct CrateOpening {
+    window: i32,
+    kind: CrateKind,
+    dimension: String,
+    pos: [i32; 3],
+    player_name: String,
+    reward: Reward,
+    preview: Vec<ItemStack>,
+    elapsed: u32,
+    duration: u32,
+    effect: String,
 }
 
 static STATE: Mutex<Option<Smp>> = Mutex::new(None);
@@ -267,6 +294,10 @@ fn open(dir: PathBuf) -> Smp {
     if let Err(e) = &last {
         log::error!("[AuraEssentials] last positions are off: {e}");
     }
+    let resource_pack = smp_resource_pack::read(&dir);
+    if let Err(e) = &resource_pack {
+        log::error!("[AuraEssentials] pacote Java desativado: {e}");
+    }
     let (casino, problem) = Casino::open(&dir, config.casino, config.gambling.enabled);
     if let Some(e) = problem {
         log::error!("[AuraEssentials] casino.json can't be read, the day's ledger starts again (kept apart): {e}");
@@ -286,6 +317,9 @@ fn open(dir: PathBuf) -> Smp {
         games: Games::new(config.gambling),
         lottery: Lottery::default(),
         casino,
+        crate_views: Default::default(),
+        crate_openings: Default::default(),
+        crate_pending: Default::default(),
         places,
         claims,
         board,
@@ -298,6 +332,7 @@ fn open(dir: PathBuf) -> Smp {
         switches,
         reports,
         last,
+        resource_pack,
         standing: Default::default(),
     }
 }
@@ -509,6 +544,18 @@ pub fn commands(commands: &mut Vec<NativeCommand>) {
     for usage in smp_admin::USAGES {
         commands.push(NativeCommand::op(usage, smp_admin::LEVEL));
     }
+    for usage in smp_worlds::USAGES {
+        commands.push(NativeCommand::op(usage, 3));
+    }
+    for usage in smp_holograms::USAGES {
+        commands.push(NativeCommand::op(usage, 3));
+    }
+    for usage in smp_crates::USAGES {
+        commands.push(NativeCommand::op(usage, 3));
+    }
+    for usage in smp_npcs::USAGES {
+        commands.push(NativeCommand::op(usage, 3));
+    }
     for usage in ["aura", "aura status", "aura on [part:word]", "aura off [part:word] [reason:text]"] {
         commands.push(NativeCommand::op(usage, smp_switch::LEVEL));
     }
@@ -670,6 +717,556 @@ const COMMANDS: [&str; 16] = [
     "lottery", "ah", "casino",
 ];
 
+fn hologram_entity_uuid(id: &str, line: usize) -> u128 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in id.bytes().chain(line.to_le_bytes()) {
+        hash = (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    0xa00a_0000_0000_4000_8000_0000_0000_0000_u128 | u128::from(hash)
+}
+
+fn hologram_text_nbt(line: &str, background: bool, width: u16) -> horizon_world::nbt::Compound {
+    use horizon_world::nbt::{Compound, Tag};
+    let mut nbt = Compound::new();
+    nbt.insert(
+        "text".into(),
+        Tag::String(serde_json::json!({ "text": line, "italic": false }).to_string().into()),
+    );
+    nbt.insert("line_width".into(), Tag::Int(i32::from(width)));
+    nbt.insert("background".into(), Tag::Int(if background { 0x4000_0000 } else { 0 }));
+    nbt.insert("default_background".into(), Tag::Byte(0));
+    nbt.insert("billboard".into(), Tag::String("center".into()));
+    nbt.insert("alignment".into(), Tag::String("center".into()));
+    nbt.insert("see_through".into(), Tag::Byte(1));
+    nbt.insert("shadow".into(), Tag::Byte(1));
+    nbt
+}
+
+fn sync_hologram(game: &mut Game<'_>, hologram: &Hologram) {
+    let mut lines = smp_holograms::Data::lines(hologram);
+    if !hologram.split_background {
+        lines = vec![lines.join("\n")];
+    }
+    for (index, line) in lines.iter().enumerate() {
+        let uuid = hologram_entity_uuid(&hologram.id, index);
+        let pos = [
+            hologram.position[0],
+            hologram.position[1] - index as f64 * 0.27,
+            hologram.position[2],
+        ];
+        let nbt = hologram_text_nbt(line, hologram.split_background, hologram.line_width);
+        if let Some((dimension, id, _)) = game.native_entity_by_uuid(uuid) {
+            if dimension != hologram.dimension {
+                game.native_remove_entity(&dimension, id);
+            } else {
+                game.native_merge_entity_nbt(&dimension, id, nbt);
+                game.native_move_entity(&dimension, id, pos, 0.0, 0.0);
+                continue;
+            }
+        }
+        let _ = game.native_summon_with_uuid(
+            &hologram.dimension,
+            "minecraft:text_display",
+            pos,
+            nbt,
+            uuid,
+        );
+    }
+    for index in lines.len()..128 {
+        let uuid = hologram_entity_uuid(&hologram.id, index);
+        let Some((dimension, id, _)) = game.native_entity_by_uuid(uuid) else { break };
+        game.native_remove_entity(&dimension, id);
+    }
+}
+
+fn remove_hologram_entities(game: &mut Game<'_>, id: &str) {
+    for index in 0..128 {
+        let uuid = hologram_entity_uuid(id, index);
+        let Some((dimension, entity, _)) = game.native_entity_by_uuid(uuid) else { break };
+        game.native_remove_entity(&dimension, entity);
+    }
+}
+
+fn hologram_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> bool {
+    if !smp_holograms::COMMANDS.contains(&line.split_whitespace().next().unwrap_or_default()) {
+        return false;
+    }
+    let Some(world) = game.native_world_dir() else { return true };
+    let dir = world.join(smp_store::DIR);
+    let mut data = match smp_holograms::Data::open(&dir) {
+        Ok(data) => data,
+        Err(error) => {
+            game.native_tell(player.uuid, Text::literal(format!("Hologramas desativados: {error}")));
+            return true;
+        }
+    };
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let action = words.get(1).copied().unwrap_or("listar");
+    if action == "preview" || action == "prever" {
+        let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else {
+            game.native_tell(player.uuid, Text::literal("Uso: /caixa preview <tipo>"));
+            return true;
+        };
+        let rewards = data.rewards.get(&kind).cloned().unwrap_or_default();
+        let mut items = vec![None; 27];
+        for (slot, reward) in rewards.iter().take(27).enumerate() {
+            if let Some(stack) = decode_stack(&reward.item_nbt_hex) {
+                items[slot] = Some(with_lore(stack, &[(format!("Peso: {}", reward.weight), "gray")]));
+            }
+        }
+        if rewards.is_empty() {
+            game.native_tell(player.uuid, Text::literal("Esta caixa ainda não tem prêmios."));
+        } else if game.native_open_menu(player.uuid, 3, Text::literal(format!("Prêmios: {}", kind.id())), items).is_none() {
+            game.native_tell(player.uuid, Text::literal("Não foi possível abrir a prévia."));
+        }
+        return true;
+    }
+    let mut changed = false;
+    let reply = match action {
+        "listar" | "lista" | "list" | "menu" => {
+            let ids: Vec<_> = data.holograms.keys().cloned().collect();
+            if ids.is_empty() { "Nenhum holograma cadastrado.".to_owned() }
+            else { format!("Hologramas: {}", ids.join(", ")) }
+        }
+        "criar" | "editar" => {
+            let args = line.trim().splitn(3, ' ').nth(2).unwrap_or_default();
+            let Some((id, text)) = args.split_once(' ') else {
+                game.native_tell(player.uuid, Text::literal("Uso: /holograma criar <id> <texto>"));
+                return true;
+            };
+            let id = id.trim();
+            let text = text.trim().replace("\\n", "\n").replace('|', "\n");
+            if id.is_empty() || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+                game.native_tell(player.uuid, Text::literal("O ID deve usar letras, números, _ ou -."));
+                return true;
+            }
+            if text.is_empty() {
+                game.native_tell(player.uuid, Text::literal("Informe o texto do holograma."));
+                return true;
+            }
+            let holo = data.holograms.entry(id.to_owned()).or_insert_with(|| Hologram {
+                id: id.to_owned(),
+                dimension: player.dimension.clone(),
+                position: [player.position[0], player.position[1] + 2.2, player.position[2]],
+                title: String::new(),
+                description: String::new(),
+                split_background: true,
+                line_width: 220,
+                wrap_chars: 0,
+                excluded_players: Vec::new(),
+            });
+            if action == "criar" {
+                holo.dimension = player.dimension.clone();
+                holo.position = [player.position[0], player.position[1] + 2.2, player.position[2]];
+            }
+            holo.title = text;
+            changed = true;
+            sync_hologram(game, holo);
+            format!("Holograma {id} salvo na dimensão {}.", player.dimension)
+        }
+        "mover" => {
+            let Some(id) = words.get(2) else { return true };
+            let Some(holo) = data.holograms.get_mut(*id) else {
+                game.native_tell(player.uuid, Text::literal("Holograma não encontrado."));
+                return true;
+            };
+            holo.dimension = player.dimension.clone();
+            holo.position = [player.position[0], player.position[1] + 2.2, player.position[2]];
+            sync_hologram(game, holo);
+            changed = true;
+            format!("Holograma {id} movido para {}.", player.dimension)
+        }
+        "remover" => {
+            let Some(id) = words.get(2) else { return true };
+            if data.holograms.remove(*id).is_some() {
+                remove_hologram_entities(game, id);
+                changed = true;
+                format!("Holograma {id} removido.")
+            } else { "Holograma não encontrado.".to_owned() }
+        }
+        "fundo" => {
+            let (Some(id), Some(mode)) = (words.get(2), words.get(3)) else { return true };
+            let Some(holo) = data.holograms.get_mut(*id) else { return true };
+            holo.split_background = match *mode { "separado" => true, "junto" => false, _ => {
+                game.native_tell(player.uuid, Text::literal("Use: separado ou junto.")); return true;
+            }};
+            sync_hologram(game, holo);
+            changed = true;
+            format!("Fundo do holograma {id} atualizado.")
+        }
+        "largura" => {
+            let (Some(id), Some(width)) = (words.get(2), words.get(3).and_then(|v| v.parse::<u16>().ok())) else { return true };
+            let Some(holo) = data.holograms.get_mut(*id) else { return true };
+            holo.line_width = width.clamp(40, 1024);
+            sync_hologram(game, holo);
+            changed = true;
+            format!("Largura do holograma {id} atualizada.")
+        }
+        _ => "Use /holograma listar, criar, editar, mover, remover, fundo ou largura.".to_owned(),
+    };
+    if changed && let Err(error) = data.save(&dir) {
+        game.native_tell(player.uuid, Text::literal(format!("Falha ao salvar hologramas: {error}")));
+        return true;
+    }
+    game.native_tell(player.uuid, Text::literal(reply));
+    true
+}
+
+fn crate_key_stack(kind: CrateKind, amount: u32) -> ItemStack {
+    use horizon_world::nbt::{Compound, Tag};
+    let mut stack = ItemStack {
+        item: kind.item().into(),
+        count: amount.clamp(1, 64),
+        damage: 0,
+        extra: None,
+    };
+    stack.data_mut().custom_name = Some(component_nbt(&serde_json::json!({
+        "text": kind.key_name(), "italic": false, "color": "gold"
+    })));
+    let mut custom = Compound::new();
+    custom.insert("auraessentials_key".into(), Tag::String(kind.id().into()));
+    stack.data_mut().set_other("minecraft:custom_data", Some(Tag::Compound(custom)));
+    stack
+}
+
+fn stack_key_kind(stack: &ItemStack) -> Option<CrateKind> {
+    let horizon_world::nbt::Tag::Compound(custom) = stack.data()?.other("minecraft:custom_data")? else {
+        return None;
+    };
+    let horizon_world::nbt::Tag::String(value) = custom.get("auraessentials_key")? else {
+        return None;
+    };
+    CrateKind::parse(value.as_ref())
+}
+
+fn crate_command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> bool {
+    if !smp_crates::COMMANDS.contains(&line.split_whitespace().next().unwrap_or_default()) {
+        return false;
+    }
+    let Some(world) = game.native_world_dir() else { return true };
+    let dir = world.join(smp_store::DIR);
+    let mut data = match smp_crates::Data::open(&dir) {
+        Ok(data) => data,
+        Err(error) => {
+            game.native_tell(player.uuid, Text::literal(format!("Caixas desativadas: {error}")));
+            return true;
+        }
+    };
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let action = words.get(1).copied().unwrap_or("listar");
+    let mut changed = false;
+    let reply = match action {
+        "listar" => {
+            if data.blocks.is_empty() { "Nenhuma caixa cadastrada.".to_owned() }
+            else {
+                format!("Caixas: {}", data.blocks.iter().map(|b| format!("{} @ {} {} {} {}", b.kind.id(), b.dimension, b.x, b.y, b.z)).collect::<Vec<_>>().join("; "))
+            }
+        }
+        "definir" | "set" => {
+            if words.len() == 3 {
+                let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else {
+                    game.native_tell(player.uuid, Text::literal("Tipo inválido. Use voto, membro, bronze, ouro ou diamante."));
+                    return true;
+                };
+                if let Some(smp) = state(dir.clone()).as_mut() {
+                    smp.crate_pending.insert(player.uuid, Some(kind));
+                }
+                game.native_tell(player.uuid, Text::literal(format!("Clique no bloco que será a caixa {}.", kind.id())));
+                return true;
+            }
+            let (Some(kind), Some(x), Some(y), Some(z)) = (
+                words.get(2).and_then(|s| CrateKind::parse(s)),
+                words.get(3).and_then(|s| s.parse::<i32>().ok()),
+                words.get(4).and_then(|s| s.parse::<i32>().ok()),
+                words.get(5).and_then(|s| s.parse::<i32>().ok()),
+            ) else {
+                game.native_tell(player.uuid, Text::literal("Uso: /caixa definir <tipo> <x> <y> <z>"));
+                return true;
+            };
+            data.add_block(CrateBlock { dimension: player.dimension.clone(), x, y, z, kind });
+            changed = true;
+            format!("Caixa {} definida em {} {x} {y} {z}.", kind.id(), player.dimension)
+        }
+        "remover" | "remove" => {
+            if words.len() == 2 {
+                if let Some(smp) = state(dir.clone()).as_mut() {
+                    smp.crate_pending.insert(player.uuid, None);
+                }
+                game.native_tell(player.uuid, Text::literal("Clique na caixa que deseja remover."));
+                return true;
+            }
+            let (Some(dimension), Some(x), Some(y), Some(z)) = (
+                words.get(2).copied(),
+                words.get(3).and_then(|s| s.parse::<i32>().ok()),
+                words.get(4).and_then(|s| s.parse::<i32>().ok()),
+                words.get(5).and_then(|s| s.parse::<i32>().ok()),
+            ) else { return true };
+            let old = data.blocks.len();
+            data.blocks.retain(|b| !(b.dimension == dimension && b.x == x && b.y == y && b.z == z));
+            changed = data.blocks.len() != old;
+            if changed { "Caixa removida.".to_owned() } else { "Nenhuma caixa nesse local.".to_owned() }
+        }
+        "chave" | "key" | "dar" | "give" => {
+            let (Some(kind), Some(name)) = (words.get(2).and_then(|s| CrateKind::parse(s)), words.get(3)) else {
+                game.native_tell(player.uuid, Text::literal("Uso: /caixa chave <tipo> <jogador> [quantidade]"));
+                return true;
+            };
+            let amount = words.get(4).and_then(|s| s.parse::<u32>().ok()).unwrap_or(1).clamp(1, 64);
+            let Some(target) = game.native_server_players().into_iter().find(|p| p.name.eq_ignore_ascii_case(name)) else {
+                game.native_tell(player.uuid, Text::literal("O jogador precisa estar online."));
+                return true;
+            };
+            if game.native_give_stack(target.uuid, crate_key_stack(kind, amount)).is_some() {
+                format!("Inventário de {} cheio; a chave não coube.", target.name)
+            } else { format!("{amount} {} entregue(s) para {}.", kind.key_name(), target.name) }
+        }
+        "premio" | "reward" | "addpremio" | "addreward" => {
+            let (Some(kind), Some(weight)) = (
+                words.get(2).and_then(|s| CrateKind::parse(s)),
+                Some(words.get(3).and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0)).filter(|w| w.is_finite() && *w > 0.0),
+            ) else {
+                game.native_tell(player.uuid, Text::literal("Segure o item e use /caixa premio <tipo> <peso>"));
+                return true;
+            };
+            let Some(stack) = game.native_held_stack(player.uuid).filter(|stack| stack.count > 0) else {
+                game.native_tell(player.uuid, Text::literal("Segure o item que será o prêmio."));
+                return true;
+            };
+            let Some(encoded) = encode_stack(&stack) else { return true };
+            let rewards = data.rewards.entry(kind).or_default();
+            let id = format!("{}-{}", kind.id(), chrono::Utc::now().timestamp_millis());
+            rewards.push(Reward { id: id.clone(), item_nbt_hex: encoded, weight, commands: Vec::new(), broadcast: false });
+            changed = true;
+            format!("Prêmio {id} cadastrado na caixa {} com peso {weight}.", kind.id())
+        }
+        "removerpremio" | "removereward" => {
+            let (Some(kind), Some(id)) = (words.get(2).and_then(|s| CrateKind::parse(s)), words.get(3)) else { return true };
+            if let Some(rewards) = data.rewards.get_mut(&kind) {
+                let old = rewards.len();
+                rewards.retain(|reward| reward.id != *id);
+                changed = old != rewards.len();
+            }
+            if changed { "Prêmio removido.".to_owned() } else { "Prêmio não encontrado.".to_owned() }
+        }
+        "premios" => {
+            let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else { return true };
+            let rewards = data.rewards.get(&kind).cloned().unwrap_or_default();
+            if rewards.is_empty() { format!("A caixa {} ainda não tem prêmios.", kind.id()) }
+            else { format!("Prêmios de {}: {}", kind.id(), rewards.iter().map(|r| format!("{} (peso {})", r.id, r.weight)).collect::<Vec<_>>().join(", ")) }
+        }
+        "limparpremios" | "clearrewards" => {
+            let Some(kind) = words.get(2).and_then(|s| CrateKind::parse(s)) else { return true };
+            data.rewards.remove(&kind);
+            changed = true;
+            format!("Prêmios da caixa {} apagados.", kind.id())
+        }
+        "animacao" | "animation" => {
+            let (Some(kind), Some(animation)) = (words.get(2).and_then(|s| CrateKind::parse(s)), words.get(3)) else { return true };
+            if !["classica", "rapida", "brilho"].contains(animation) { return true; }
+            data.animations.insert(kind, (*animation).to_owned());
+            changed = true;
+            format!("Animação da caixa {} definida como {}.", kind.id(), animation)
+        }
+        "efeito" | "effect" => {
+            let (Some(kind), Some(effect)) = (words.get(2).and_then(|s| CrateKind::parse(s)), words.get(3)) else { return true };
+            if !["nenhum", "portal", "encanto", "brilho"].contains(effect) { return true; }
+            data.effects.insert(kind, (*effect).to_owned());
+            changed = true;
+            format!("Efeito da caixa {} definido como {}.", kind.id(), effect)
+        }
+        _ => "Use /caixa listar, definir, remover, chave, premio, limparpremios, preview, animacao ou efeito.".to_owned(),
+    };
+    if changed && let Err(error) = data.save(&dir) {
+        game.native_tell(player.uuid, Text::literal(format!("Falha ao salvar caixas: {error}")));
+        return true;
+    }
+    game.native_tell(player.uuid, Text::literal(reply));
+    true
+}
+
+pub(in crate::game) fn crate_right_click(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut bool) {
+    if !game.native_on(ID) { return; }
+    let Some(player) = game.native_acting_player() else { return };
+    let Some(world) = game.native_world_dir() else { return };
+    let dir = world.join(smp_store::DIR);
+    let pending = STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_mut()
+        .filter(|smp| smp.dir == dir)
+        .and_then(|smp| smp.crate_pending.remove(&player.uuid));
+    if let Some(action) = pending {
+        *canceled = true;
+        let Ok(mut data) = smp_crates::Data::open(&dir) else { return };
+        match action {
+            Some(kind) => {
+                data.add_block(CrateBlock { dimension: player.dimension.clone(), x: pos[0], y: pos[1], z: pos[2], kind });
+                game.native_tell(player.uuid, Text::literal(format!("Caixa {} definida em {} {} {} {}.", kind.id(), player.dimension, pos[0], pos[1], pos[2])));
+            }
+            None => {
+                let old = data.blocks.len();
+                data.blocks.retain(|b| !(b.dimension == player.dimension && [b.x, b.y, b.z] == pos));
+                game.native_tell(player.uuid, Text::literal(if data.blocks.len() != old { "Caixa removida." } else { "Não há caixa neste bloco." }));
+            }
+        }
+        if let Err(error) = data.save(&dir) {
+            game.native_tell(player.uuid, Text::literal(format!("Falha ao salvar caixas: {error}")));
+        }
+        return;
+    }
+    let Ok(data) = smp_crates::Data::open(&dir) else { return };
+    let Some(block) = data.blocks.iter().find(|b| b.dimension == player.dimension && [b.x, b.y, b.z] == pos) else { return };
+    *canceled = true;
+    let Some(key) = game.native_held_stack(player.uuid) else {
+        game.native_tell(player.uuid, Text::literal("Esta caixa precisa de uma chave."));
+        return;
+    };
+    if stack_key_kind(&key) != Some(block.kind) {
+        game.native_tell(player.uuid, Text::literal(format!("Use {} nesta caixa.", block.kind.key_name())));
+        return;
+    }
+    let rewards = data.rewards.get(&block.kind).cloned().unwrap_or_default();
+    if rewards.is_empty() {
+        game.native_tell(player.uuid, Text::literal("Esta caixa ainda não tem prêmios."));
+        return;
+    }
+    let mut items = vec![None; 27];
+    for (slot, reward) in rewards.iter().take(21).enumerate() {
+        if let Some(stack) = decode_stack(&reward.item_nbt_hex) {
+            items[slot] = Some(with_lore(stack, &[(format!("Peso: {}", reward.weight), "gray")]));
+        }
+    }
+    items[22] = Some(button("minecraft:tripwire_hook", "Abrir caixa", "green"));
+    let window = game.native_open_menu(
+        player.uuid,
+        3,
+        Text::literal(format!("Caixa {}", block.kind.id())),
+        items,
+    );
+    if let Some(window) = window {
+        let mut state = state(dir);
+        if let Some(smp) = state.as_mut() {
+            smp.crate_views.insert(
+                player.uuid,
+                (window, block.kind, player.dimension.clone(), pos),
+            );
+        }
+    } else {
+        game.native_tell(player.uuid, Text::literal("Não foi possível abrir a caixa."));
+    }
+}
+
+fn begin_crate_opening(
+    game: &mut Game<'_>,
+    player: &NativeServerPlayer,
+    window: i32,
+    kind: CrateKind,
+    dimension: String,
+    pos: [i32; 3],
+) -> Option<CrateOpening> {
+    let Some(world) = game.native_world_dir() else { return None };
+    let dir = world.join(smp_store::DIR);
+    let Ok(data) = smp_crates::Data::open(&dir) else { return None };
+    let Some(key) = game.native_held_stack(player.uuid) else {
+        game.native_tell(player.uuid, Text::literal("Segure a chave da caixa para abrir."));
+        return None;
+    };
+    if stack_key_kind(&key) != Some(kind) {
+        game.native_tell(player.uuid, Text::literal("A chave correspondente precisa estar na mão."));
+        return None;
+    }
+    let Some(reward) = data.reward(kind, below(1_000_000) as f64 / 1_000_000.0).cloned() else {
+        game.native_tell(player.uuid, Text::literal("Esta caixa ainda não tem prêmios."));
+        return None;
+    };
+    if decode_stack(&reward.item_nbt_hex).is_none() {
+        game.native_tell(player.uuid, Text::literal("O prêmio salvo está inválido; a chave não foi consumida."));
+        return None;
+    }
+    if !game.native_take_matching_held(player.uuid, &key, 1) {
+        game.native_tell(player.uuid, Text::literal("Não foi possível consumir a chave."));
+        return None;
+    }
+    let mut preview: Vec<ItemStack> = data.rewards.get(&kind).into_iter().flatten()
+        .filter_map(|r| decode_stack(&r.item_nbt_hex)).collect();
+    if preview.is_empty() {
+        preview.push(decode_stack(&reward.item_nbt_hex)?);
+    }
+    let animation = data.animations.get(&kind).map(String::as_str).unwrap_or("classica");
+    let duration = match animation {
+        "rapida" => 24,
+        "brilho" => 34,
+        _ => 48,
+    };
+    let effect = data.effects.get(&kind).cloned().unwrap_or_else(|| "nenhum".into());
+    let particle = match effect.as_str() {
+        "portal" => Some("portal"),
+        "encanto" => Some("enchant"),
+        "brilho" => Some("end_rod"),
+        _ => None,
+    };
+    if let Some(particle) = particle {
+        let center = [f64::from(pos[0]) + 0.5, f64::from(pos[1]) + 1.0, f64::from(pos[2]) + 0.5];
+        let line = format!("execute in {dimension} run particle minecraft:{particle} {} {} {} 0.3 0.55 0.3 0.02 24 force", center[0], center[1], center[2]);
+        game.native_run_command(&line);
+    }
+    Some(CrateOpening {
+        window, kind, dimension, pos, player_name: player.name.clone(), reward,
+        preview, elapsed: 0, duration, effect,
+    })
+}
+
+fn crate_opening_items(opening: &CrateOpening) -> Vec<Option<ItemStack>> {
+    let mut items = vec![None; 27];
+    let pane = button("minecraft:gray_stained_glass_pane", " ", "gray");
+    for slot in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 23, 24, 25, 26] {
+        items[slot] = Some(pane.clone());
+    }
+    if let Some(candidate) = opening.preview.get((opening.elapsed as usize / 2) % opening.preview.len().max(1)) {
+        items[13] = Some(candidate.clone());
+    }
+    items[22] = Some(button("minecraft:clock", "Sorteando...", "gold"));
+    items
+}
+
+fn tick_crate_openings(game: &mut Game<'_>, smp: &mut Smp, players: &[NativeServerPlayer]) {
+    let openings = std::mem::take(&mut smp.crate_openings);
+    for (uuid, mut opening) in openings {
+        if !players.iter().any(|player| player.uuid == uuid) {
+            smp.crate_openings.insert(uuid, opening);
+            continue;
+        }
+        opening.elapsed = opening.elapsed.saturating_add(1);
+        if opening.elapsed < opening.duration {
+            game.native_set_menu_items(uuid, crate_opening_items(&opening));
+            smp.crate_openings.insert(uuid, opening);
+            continue;
+        }
+        smp.crate_views.remove(&uuid);
+        game.native_close_menu(uuid);
+        if let Some(stack) = decode_stack(&opening.reward.item_nbt_hex)
+            && let Some(left) = game.native_give_stack(uuid, stack)
+        {
+            let _ = game.native_give_stack(uuid, crate_key_stack(opening.kind, 1));
+            let _ = game.native_give_stack(uuid, left);
+            game.native_tell(uuid, Text::literal("O prêmio não coube. A chave foi devolvida; libere espaço e tente novamente."));
+            continue;
+        }
+        for command in &opening.reward.commands {
+            let command = command.replace("{player}", &opening.player_name);
+            game.native_run_command(command.strip_prefix('/').unwrap_or(&command));
+        }
+        if opening.effect == "brilho" {
+            let center = [f64::from(opening.pos[0]) + 0.5, f64::from(opening.pos[1]) + 1.0, f64::from(opening.pos[2]) + 0.5];
+            let line = format!("execute in {} run particle minecraft:end_rod {} {} {} 0.3 0.4 0.3 0.02 18 force", opening.dimension, center[0], center[1], center[2]);
+            game.native_run_command(&line);
+        }
+        let announcement = format!("{} abriu uma caixa {}!", opening.player_name, opening.kind.id());
+        if opening.reward.broadcast { game.native_broadcast(Text::literal(announcement)); }
+        else { game.native_tell(uuid, Text::literal(format!("Prêmio recebido: {}.", opening.reward.id))); }
+    }
+}
+
 /// The world border, from the Overworld's `world_border.dat` (the root's in
 /// older worlds), as the game last saved it; None without one (the default
 /// border, 60 million blocks wide).
@@ -801,6 +1398,9 @@ pub(in crate::game) fn perform(
     let word = line.split(' ').next().unwrap_or_default();
     let ours = [
         &COMMANDS[..],
+        &smp_holograms::COMMANDS,
+        &smp_crates::COMMANDS,
+        &smp_npcs::COMMANDS,
         &smp_places::COMMANDS,
         &smp_claims::COMMANDS,
         &smp_board::COMMANDS,
@@ -811,8 +1411,21 @@ pub(in crate::game) fn perform(
         &smp_reports::COMMANDS,
         &smp_ledger::COMMANDS,
         &smp_admin::COMMANDS,
+        &smp_worlds::COMMANDS,
     ];
     if !game.native_on(ID) || !ours.iter().any(|c| c.contains(&word)) {
+        return;
+    }
+    if hologram_command(game, player, line) {
+        *ran = true;
+        return;
+    }
+    if crate_command(game, player, line) {
+        *ran = true;
+        return;
+    }
+    if smp_npc_glue::command(game, player, line) {
+        *ran = true;
         return;
     }
     BUSY.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -887,7 +1500,9 @@ pub(in crate::game) fn perform(
     });
     let line = resolved.as_deref().unwrap_or(line);
     let mut admin = Vec::new();
-    let out = if smp_admin::COMMANDS.contains(&word) {
+    let out = if smp_worlds::COMMANDS.contains(&word) {
+        smp_worlds::command(game, player, &players, line)
+    } else if smp_admin::COMMANDS.contains(&word) {
         let economy = smp.economy.as_ref().ok();
         let names = ServerNames::read(&dir, economy);
         let find = |n: &str| {
@@ -1130,6 +1745,69 @@ pub(in crate::game) fn player_left(game: &mut Game<'_>, uuid: u128, name: &str) 
     BUSY.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Backends ligados por Velocity enviam o pacote depois de o jogador aparecer
+/// no mundo. Sem proxy, o loader configura o envio pré-entrada do Horizon.
+pub(in crate::game) fn player_logged_in(game: &mut Game<'_>, player: u128) {
+    let is_velocity = game.native_proxy_forwarding() == Some("velocity");
+    let Some(world) = game.native_world_dir() else { return };
+    let guard = state(world.join(smp_store::DIR));
+    let Some(smp) = guard.as_ref() else { return };
+    let Ok(config) = &smp.resource_pack else { return };
+    if is_velocity && config.enabled {
+        let prompt = Text::literal(config.prompt.clone());
+        if !game.native_send_resource_pack(
+            player,
+            smp_resource_pack::PACK_ID,
+            &config.url,
+            &config.sha1,
+            Some(&prompt),
+            config.required,
+        ) {
+            log::warn!("[AuraEssentials] não foi possível enviar o pacote principal Java para {player}");
+        }
+    }
+    for pack in &config.additional_packs {
+        let prompt = Text::literal(pack.prompt.clone());
+        if !game.native_send_resource_pack(
+            player,
+            smp_resource_pack::additional_pack_id(&pack.id),
+            &pack.url,
+            &pack.sha1,
+            Some(&prompt),
+            pack.required,
+        ) {
+            log::warn!("[AuraEssentials] não foi possível enviar o pacote {} para {player}", pack.id);
+        }
+    }
+}
+
+/// Se o pacote enviado no backend de proxy for obrigatório, recusa jogadores
+/// que o rejeitam ou cujo cliente não consegue carregá-lo.
+pub(in crate::game) fn resource_pack_status(
+    game: &mut Game<'_>,
+    player: u128,
+    pack: u128,
+    status: i32,
+) {
+    if !matches!(status, 1 | 2 | 5 | 6) {
+        return;
+    }
+    let Some(world) = game.native_world_dir() else { return };
+    let guard = state(world.join(smp_store::DIR));
+    let Some(smp) = guard.as_ref() else { return };
+    let Ok(config) = &smp.resource_pack else { return };
+    let required = if pack == smp_resource_pack::PACK_ID {
+        config.enabled && config.required
+    } else {
+        config.additional_packs.iter().any(|p| {
+            p.required && smp_resource_pack::additional_pack_id(&p.id) == pack
+        })
+    };
+    if required {
+        game.native_kick(player, &Text::literal("O pacote de recursos do servidor é obrigatório."));
+    }
+}
+
 /// Sugere apenas os locais do próprio jogador ao completar `/home <nome>`.
 pub(in crate::game) fn home_suggestions(
     game: &mut Game<'_>,
@@ -1214,6 +1892,7 @@ pub(in crate::game) fn guard(game: &mut Game<'_>, pos: [i32; 3], canceled: &mut 
         }
     }
 }
+
 /// A player hits the entity of type `kind` at `pos`: canceled when claims
 /// protect that type and the chunk is claimed by someone who doesn't trust
 /// them (`native_attack_entity`).
@@ -1237,6 +1916,7 @@ pub(in crate::game) fn dimension_id(dimension: crate::game::LevelDimension) -> &
         crate::game::LevelDimension::Overworld => "minecraft:overworld",
         crate::game::LevelDimension::Nether => "minecraft:the_nether",
         crate::game::LevelDimension::End => "minecraft:the_end",
+        crate::game::LevelDimension::Custom(key) => key.id(),
     }
 }
 
@@ -1460,6 +2140,24 @@ pub(in crate::game) fn menu_clicked(game: &mut Game<'_>, uuid: u128, window: i32
     };
     let mut guard = state(dir.join(smp_store::DIR));
     let smp = guard.as_mut().expect("opened");
+    if let Some(opening) = smp.crate_openings.get(&uuid)
+        && opening.window == window
+    {
+        return;
+    }
+    if let Some((active_window, kind, dimension, pos)) = smp.crate_views.get(&uuid).cloned()
+        && active_window == window
+    {
+        if mode == 0 && slot == 22 {
+            if let Some(player) = game.native_acting_player().filter(|p| p.uuid == uuid)
+                && let Some(opening) = begin_crate_opening(game, &player, window, kind, dimension, pos)
+            {
+                smp.crate_openings.insert(uuid, opening);
+                BUSY.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        return;
+    }
     // A menu of a part turned off since it opened: closed, nothing done.
     if let Some(part) = menu_part(smp, uuid, window).filter(|&p| !smp.switches.on(p)) {
         let refusal = smp_switch::refusal(part);
@@ -1653,6 +2351,10 @@ pub(in crate::game) fn menu_closed(game: &mut Game<'_>, uuid: u128, window: i32)
     };
     let mut guard = state(dir.join(smp_store::DIR));
     let smp = guard.as_mut().expect("opened");
+    if smp.crate_views.get(&uuid).is_some_and(|v| v.0 == window) {
+        smp.crate_views.remove(&uuid);
+        return;
+    }
     if smp.shop.views.get(&uuid).is_some_and(|v| v.0 == Some(window)) {
         smp.shop.views.remove(&uuid);
         return;
@@ -2521,12 +3223,16 @@ pub(in crate::game) fn tick(game: &mut Game<'_>) {
     let mut guard = state(dir.join(smp_store::DIR));
     let smp = guard.as_mut().expect("opened");
     let warming = smp.places.as_ref().is_ok_and(|p| !p.pending.is_empty());
-    let players = if n % 20 == 0 || warming {
+    let opening_crates = !smp.crate_openings.is_empty();
+    let players = if n % 20 == 0 || warming || opening_crates {
         game.native_server_players()
     } else {
         Vec::new()
     };
     let now = chrono::Utc::now().timestamp_millis();
+    if opening_crates {
+        tick_crate_openings(game, smp, &players);
+    }
     let mut out = Vec::new();
     // Where each player stands, for where they leave from (once a second).
     if n % 20 == 0 {
@@ -2572,15 +3278,26 @@ pub(in crate::game) fn tick(game: &mut Game<'_>) {
         let (o, go) = if places_on { p.tick(&bodies(&players), now) } else { Default::default() };
         out.extend(o);
         for t in go {
-            // `.3`: a whole number would be a block's centre to `tp`.
-            let line = format!(
-                "execute in {} run tp {} {:.3} {:.3} {:.3}",
-                t.to.dimension, t.name, t.to.x, t.to.y, t.to.z
-            );
-            if !game.native_run_command(&line) {
-                log::warn!("[AuraEssentials] a teleport failed: {line}");
+            // The native travel API accepts vanilla and registered custom dimension IDs,
+            // opens a valid custom dimension when needed, and targets the UUID directly.
+            // This keeps homes, warps, /back and /tpa independent of player-name parsing.
+            let rotation = players
+                .iter()
+                .find(|player| player.uuid == t.uuid)
+                .map_or([0.0, 0.0], |player| [player.yaw, player.pitch]);
+            if !game.native_teleport_player(
+                t.uuid,
+                &t.to.dimension,
+                [t.to.x, t.to.y, t.to.z],
+                rotation[0],
+                rotation[1],
+            ) {
+                log::warn!(
+                    "[AuraEssentials] teleport failed for {} to {} {:.3} {:.3} {:.3}",
+                    t.name, t.to.dimension, t.to.x, t.to.y, t.to.z
+                );
                 p.call_off(&t);
-                out.push(Out::Tell(t.uuid, "The teleport failed.".into()));
+                out.push(Out::Tell(t.uuid, "O teleporte falhou.".into()));
                 continue;
             }
             // `/spawn`: on to a safe column within the radius, as vanilla's
@@ -2869,7 +3586,8 @@ pub(in crate::game) fn tick(game: &mut Game<'_>) {
     let title = smp.board.as_ref().map(|b| b.config.title.clone()).unwrap_or_default();
     let busy = smp.places.as_ref().is_ok_and(|p| !p.pending.is_empty())
         || !smp.trades.open.is_empty()
-        || smp.casino.animating();
+        || smp.casino.animating()
+        || smp.crate_openings.keys().any(|uuid| players.iter().any(|player| player.uuid == *uuid));
     BUSY.store(busy, Relaxed);
     save(smp);
     drop(guard);

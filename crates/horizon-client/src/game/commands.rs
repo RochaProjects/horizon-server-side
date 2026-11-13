@@ -944,6 +944,7 @@ impl Game<'_> {
             Dim::Overworld => 0,
             Dim::Nether => 1,
             Dim::End => 2,
+            Dim::Custom(_) => 3,
         });
         dims
     }
@@ -3166,10 +3167,7 @@ impl Game<'_> {
         let Some(Arg::Resource(id)) = ctx.get(name) else {
             return Ok(None);
         };
-        if !matches!(
-            id.as_str(),
-            "minecraft:overworld" | "minecraft:the_nether" | "minecraft:the_end"
-        ) {
+        if horizon_core::LevelKey::parse(id).is_err() {
             return Err(err("argument.dimension.invalid", &[id]));
         }
         Ok(Some(Dim::from_id(id)))
@@ -3540,7 +3538,8 @@ impl Game<'_> {
     /// world follows it, and a dedicated server tells the event stream (`MinecraftServer.onGameRuleChanged`
     /// tells the management protocol's clients).
     pub(super) fn set_game_rule(&mut self, rule: &gamerules::Rule, value: Value) {
-        self.ui.rules.set(rule.name, value);
+        self.ui.global_rules.set(rule.name, value);
+        self.ui.rules = self.effective_rules_for_dimension(self.dim.id());
         self.sync_rules();
         if self.options.dedicated.is_some() {
             let (value_type, json) = match value {
@@ -3564,7 +3563,7 @@ impl Game<'_> {
         let Some(rule) = gamerules::rule(&name) else {
             return Ok(0);
         };
-        let current = self.ui.rules.get(rule.name).unwrap_or(rule.default);
+        let current = self.ui.global_rules.get(rule.name).unwrap_or(rule.default);
         let value = match ctx.get("value") {
             Some(Arg::Bool(b)) => Value::Bool(*b),
             Some(Arg::Int(i)) => Value::Int(*i),
