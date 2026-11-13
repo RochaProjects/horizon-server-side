@@ -351,9 +351,6 @@ fn open_items(
     let visible = item_count.saturating_sub(start).min(page_size);
     let mut mapping = HashMap::new();
     let mut items = Vec::new();
-    let mut add = |slot, id: &str, name: &str, color: &str, count| {
-        items.push(spec(slot, id, name, color, count))
-    };
     for (i, slot) in slots.iter().take(visible).enumerate() {
         let item_index = start + i;
         let item = &cat.items[item_index];
@@ -390,35 +387,35 @@ fn open_items(
         );
         items.push(spec_lore(product, lore));
     }
-    add(
+    items.push(spec(
         nav_row + 2,
         "minecraft:gray_stained_glass_pane",
         " ",
         "gray",
         1,
-    );
-    add(
+    ));
+    items.push(spec(
         nav_row + 3,
         "minecraft:stone_button",
         &format!("Página anterior ({}/{})", page + 1, pages),
         "white",
         1,
-    );
-    add(nav_row + 4, "minecraft:arrow", "Voltar", "white", 1);
-    add(
+    ));
+    items.push(spec(nav_row + 4, "minecraft:arrow", "Voltar", "white", 1));
+    items.push(spec(
         nav_row + 5,
         "minecraft:oak_button",
         &format!("Próxima página ({}/{})", page + 1, pages),
         "white",
         1,
-    );
-    add(
+    ));
+    items.push(spec(
         nav_row + 6,
         "minecraft:gray_stained_glass_pane",
         " ",
         "gray",
         1,
-    );
+    ));
     let title = format!("Loja: {}", cat.title);
     state.views.retain(|(uuid, _), _| *uuid != player);
     if let Some(window) = show_menu(host, player, &title, rows, items) {

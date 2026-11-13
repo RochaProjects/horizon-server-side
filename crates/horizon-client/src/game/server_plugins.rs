@@ -7,7 +7,6 @@ use super::{
 };
 use horizon_client::{items::ItemStack, lan::data::component_nbt, text::Text};
 use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem};
-use std::path::Path;
 
 struct GameHost<'g, 'a, 'c> {
     game: &'g mut Game<'a>,

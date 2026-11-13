@@ -773,7 +773,7 @@ impl Game<'_> {
         if !finish(true) {
             return Err(());
         }
-        let mut applied = Vec::new();
+        let mut applied: Vec<(usize, Option<ItemStack>, Option<ItemStack>)> = Vec::new();
         for (slot, old, new) in changed {
             if self
                 .native_set_inventory_slot_typed(
