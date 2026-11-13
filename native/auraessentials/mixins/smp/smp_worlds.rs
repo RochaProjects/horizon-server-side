@@ -155,7 +155,7 @@ fn ensure_idle(game: &mut Game<'_>, players: &[NativeServerPlayer], name: &str) 
 fn say(s: impl Into<String>) -> Out { Out::Reply(s.into()) }
 fn fail(s: impl Into<String>) -> Out { Out::Error(s.into()) }
 
-pub fn command(
+pub(super) fn command(
     game: &mut Game<'_>,
     actor: &NativeServerPlayer,
     players: &[NativeServerPlayer],

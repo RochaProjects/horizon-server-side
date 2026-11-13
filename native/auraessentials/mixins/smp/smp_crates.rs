@@ -37,7 +37,6 @@ pub const USAGES: [&str; 22] = [
 pub enum Kind { Voto, Membro, Bronze, Ouro, Diamante }
 
 impl Kind {
-    pub const ALL: [Self; 5] = [Self::Voto, Self::Membro, Self::Bronze, Self::Ouro, Self::Diamante];
     pub fn id(self) -> &'static str { match self { Self::Voto=>"voto",Self::Membro=>"membro",Self::Bronze=>"bronze",Self::Ouro=>"ouro",Self::Diamante=>"diamante" } }
     pub fn parse(s: &str) -> Option<Self> { match s.to_ascii_lowercase().as_str() { "voto"|"vote"=>Some(Self::Voto),"membro"|"member"=>Some(Self::Membro),"bronze"=>Some(Self::Bronze),"ouro"|"gold"=>Some(Self::Ouro),"diamante"|"diamond"=>Some(Self::Diamante),_=>None } }
     pub fn item(self) -> &'static str { match self { Self::Voto=>"minecraft:lime_candle",Self::Membro=>"minecraft:blue_candle",Self::Bronze=>"minecraft:orange_candle",Self::Ouro=>"minecraft:yellow_candle",Self::Diamante=>"minecraft:light_blue_candle" } }
@@ -73,6 +72,6 @@ mod tests {
     #[test] fn aura_key_names_and_aliases_are_stable() {
         assert_eq!(Kind::parse("diamond"),Some(Kind::Diamante));
         assert_eq!(Kind::Ouro.key_name(),"Chave de Ouro");
-        assert_eq!(Kind::ALL.map(Kind::id),["voto","membro","bronze","ouro","diamante"]);
+        assert_eq!([Kind::Voto.id(), Kind::Membro.id(), Kind::Bronze.id(), Kind::Ouro.id(), Kind::Diamante.id()], ["voto","membro","bronze","ouro","diamante"]);
     }
 }

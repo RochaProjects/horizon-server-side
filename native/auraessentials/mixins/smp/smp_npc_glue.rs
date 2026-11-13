@@ -117,7 +117,7 @@ fn remove_rendered(game: &mut Game<'_>, npc: &Npc) {
     }
 }
 
-pub fn render(game: &mut Game<'_>, npc: &Npc) -> Result<usize, String> {
+fn render(game: &mut Game<'_>, npc: &Npc) -> Result<usize, String> {
     let model = smp_npcs::model(&npc.model).ok_or_else(|| format!("Modelo AuraNPC não encontrado: {}", npc.model))?;
     let cubes = cubes(&model);
     if cubes.is_empty() || cubes.len() > MAX_CUBES as usize { return Err("O modelo não tem cubos renderizáveis ou excede 300 partes.".into()); }
@@ -187,7 +187,7 @@ fn tell(game: &mut Game<'_>, player: u128, text: impl Into<String>) {
     game.native_tell(player, Text::literal(text.into()));
 }
 
-pub fn command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> bool {
+pub(super) fn command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> bool {
     if !smp_npcs::COMMANDS.contains(&line.split_whitespace().next().unwrap_or_default()) { return false; }
     let Some(world) = game.native_world_dir() else { return true };
     let dir = world.join(smp_store::DIR);
@@ -304,7 +304,7 @@ pub fn command(game: &mut Game<'_>, player: &NativeServerPlayer, line: &str) -> 
     true
 }
 
-pub fn interact_entity(game: &mut Game<'_>, entity: i32, kind: &str, claimed: &mut bool) {
+pub(super) fn interact_entity(game: &mut Game<'_>, entity: i32, kind: &str, claimed: &mut bool) {
     if *claimed || kind != "minecraft:interaction" || !game.native_on(smp_glue_id()) { return; }
     let Some(player) = game.native_acting_player() else { return };
     let Some(world) = game.native_world_dir() else { return };
