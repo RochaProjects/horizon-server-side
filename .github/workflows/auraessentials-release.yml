@@ -47,7 +47,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           NATIVE_NO_DEFAULT_FEATURES: "1"
-        run: python3 native/tools/native.py build auraessentials --horizon ac2603ed41953f1b8b791ca8396a0eb5147baea7 | tee native-build.json
+        run: |
+          set -euo pipefail
+          python3 native/tools/native.py build auraessentials --horizon ac2603ed41953f1b8b791ca8396a0eb5147baea7 | tee native-build.json
 
       - name: Build matching server tools and package the engine
         env:
