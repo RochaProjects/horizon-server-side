@@ -214,7 +214,7 @@ fn transact_shop_item(
     let (item_ptr, item_len) = bytes(&item_id);
     let (currency_ptr, currency_len) = bytes(currency);
     let delta = if buying {
-        balance_delta as i64 * -1
+        -(balance_delta as i64)
     } else {
         balance_delta as i64
     };
@@ -337,7 +337,7 @@ fn open_items(
         return;
     };
     let item_count = cat.items.len();
-    let item_rows = ((item_count.saturating_sub(4).max(1) + 8) / 9).max(1);
+    let item_rows = item_count.saturating_sub(4).max(1).div_ceil(9).max(1);
     let rows = (item_rows + 1).clamp(3, 6) as u8;
     let size = usize::from(rows) * 9;
     let nav_row = size - 9;
