@@ -30,31 +30,16 @@ jobs:
       - name: Pin the checked out fork commit
         run: echo "HORIZON_REVISION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Install Rust and native build tools
+      - name: Install Rust
         run: |
           rustup toolchain install 1.99.1 --profile minimal
           rustup default 1.99.1
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev pkg-config
 
       - name: Restore Rust build cache
         uses: actions/cache@v4
         with:
           path: |
-            native/target/cargo
-            native/target/base-cargo
-            native/target/horizon
-            native/target/horizon-mixins
-            native/target/stage
+            target
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
@@ -63,29 +48,23 @@ jobs:
             ${{ runner.os }}-rust-1.99-
           save-always: true
 
-      - name: Build AuraEssentials into the pinned Horizon engine
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HORIZON_REPOSITORY: RochaProjects/horizon-server-side
-          NATIVE_NO_DEFAULT_FEATURES: "1"
+      - name: Build vanilla server engine with runtime plugin host
         run: |
           set -euo pipefail
-          python3 native/tools/native.py build auraessentials --horizon "$HORIZON_REVISION" | tee native-build.json
+          cargo build --locked --release -p horizon-client --no-default-features --features server-plugins --bin horizon-client
 
-      - name: Build matching server tools and package the engine
-        env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/native/target/base-cargo
+      - name: Build the separate Portuguese shop plugin and server tools
         run: |
           set -euo pipefail
-          source="native/target/horizon/$HORIZON_REVISION"
-          cargo build --manifest-path "$source/Cargo.toml" --locked --release -p horizon-server -p horizon-prepare
-          mkdir -p dist/auraessentials-server
-          cp "$CARGO_TARGET_DIR/release/horizon-server" dist/auraessentials-server/
-          cp "$CARGO_TARGET_DIR/release/horizon-prepare" dist/auraessentials-server/
-          cp "$source/research-lock.json" "$source/LICENSE" dist/auraessentials-server/
-          cp native/target/cargo/fast/horizon-client dist/auraessentials-server/horizon-engine
+          cargo build --locked --release -p horizon-plugin-aura-loja -p horizon-server -p horizon-prepare
+          mkdir -p dist/auraessentials-server/plugins
+          cp target/release/horizon-server dist/auraessentials-server/
+          cp target/release/horizon-prepare dist/auraessentials-server/
+          cp target/release/horizon-client dist/auraessentials-server/horizon-engine
+          cp target/release/libhorizon_plugin_aura_loja.so dist/auraessentials-server/plugins/
+          cp research-lock.json LICENSE dist/auraessentials-server/
           chmod +x dist/auraessentials-server/horizon-server dist/auraessentials-server/horizon-prepare dist/auraessentials-server/horizon-engine
-          printf '{"mod":"aura_essentials","version":"0.1.0","horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/auraessentials-release.json
+          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":1,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/plugin-release.json
           tar -czf dist/aura-essentials-server-linux-x86_64.tar.gz -C dist auraessentials-server
           sha256sum dist/aura-essentials-server-linux-x86_64.tar.gz > dist/aura-essentials-server-linux-x86_64.tar.gz.sha256
 
@@ -100,6 +79,6 @@ jobs:
           gh release create "$tag" \
             --repo "$GITHUB_REPOSITORY" \
             --title "AuraEssentials ${tag#aura-v}" \
-            --notes "Engine de servidor Horizon 26.3 com AuraEssentials integrado. Linux x86_64; inclui horizon-server, horizon-engine e horizon-prepare. Os exporters oficiais são compilados localmente pelo loader durante a preparação inicial." \
+            --notes "Servidor Horizon 26.3 vanilla com host de plugins C ABI v1 e o plugin Aura Loja em biblioteca .so separada. Linux x86_64; inclui horizon-server, horizon-engine, horizon-prepare e plugins/libhorizon_plugin_aura_loja.so. Compras e vendas ainda não estão conectadas à economia." \
             dist/aura-essentials-server-linux-x86_64.tar.gz \
             dist/aura-essentials-server-linux-x86_64.tar.gz.sha256

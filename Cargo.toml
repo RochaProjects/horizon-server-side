@@ -53,6 +53,9 @@ members = [
     "crates/horizon-shader-api",
     "crates/horizon-release-sign",
     "crates/horizon-mod-deps",
+    "server-plugins/api",
+    "server-plugins/loader",
+    "server-plugins/aura-loja",
     "xtask",
 ]
 resolver = "2"

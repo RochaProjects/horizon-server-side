@@ -1,0 +1,618 @@
+{
+  "blocos": [
+    {
+      "id": "cobblestone",
+      "displayName": "Pedregulho",
+      "material": "COBBLESTONE",
+      "amount": 1,
+      "buy": 6,
+      "sell": 1
+    },
+    {
+      "id": "dirt",
+      "displayName": "Terra",
+      "material": "DIRT",
+      "amount": 1,
+      "buy": 5,
+      "sell": 1
+    },
+    {
+      "id": "grass_block",
+      "displayName": "Bloco de Grama",
+      "material": "GRASS_BLOCK",
+      "amount": 1,
+      "buy": 8,
+      "sell": 1.5
+    },
+    {
+      "id": "stone",
+      "displayName": "Pedra Lisa",
+      "material": "STONE",
+      "amount": 1,
+      "buy": 8,
+      "sell": 1.5
+    },
+    {
+      "id": "glass",
+      "displayName": "Vidro",
+      "material": "GLASS",
+      "amount": 1,
+      "buy": 14,
+      "sell": 2
+    },
+    {
+      "id": "bricks",
+      "displayName": "Tijolos",
+      "material": "BRICKS",
+      "amount": 1,
+      "buy": 20,
+      "sell": 3
+    },
+    {
+      "id": "stone_bricks",
+      "displayName": "Tijolos de Pedra",
+      "material": "STONE_BRICKS",
+      "amount": 1,
+      "buy": 22,
+      "sell": 3.5
+    },
+    {
+      "id": "polished_blackstone_bricks",
+      "displayName": "Tijolos de Pedra Negra",
+      "material": "POLISHED_BLACKSTONE_BRICKS",
+      "amount": 1,
+      "buy": 24,
+      "sell": 4
+    }
+  ],
+  "minerios": [
+    {
+      "id": "coal",
+      "displayName": "Carvao",
+      "material": "COAL",
+      "amount": 1,
+      "buy": 120,
+      "sell": 0
+    },
+    {
+      "id": "raw_iron",
+      "displayName": "Ferro Bruto",
+      "material": "RAW_IRON",
+      "amount": 1,
+      "buy": 220,
+      "sell": 0
+    },
+    {
+      "id": "raw_copper",
+      "displayName": "Cobre Bruto",
+      "material": "RAW_COPPER",
+      "amount": 1,
+      "buy": 180,
+      "sell": 0
+    },
+    {
+      "id": "raw_gold",
+      "displayName": "Ouro Bruto",
+      "material": "RAW_GOLD",
+      "amount": 1,
+      "buy": 320,
+      "sell": 0
+    },
+    {
+      "id": "redstone",
+      "displayName": "Redstone",
+      "material": "REDSTONE",
+      "amount": 1,
+      "buy": 90,
+      "sell": 0
+    },
+    {
+      "id": "lapis_lazuli",
+      "displayName": "Lapis-Lazuli",
+      "material": "LAPIS_LAZULI",
+      "amount": 1,
+      "buy": 110,
+      "sell": 0
+    },
+    {
+      "id": "diamond",
+      "displayName": "Diamante",
+      "material": "DIAMOND",
+      "amount": 1,
+      "buy": 1200,
+      "sell": 0
+    },
+    {
+      "id": "emerald",
+      "displayName": "Esmeralda",
+      "material": "EMERALD",
+      "amount": 1,
+      "buy": 900,
+      "sell": 0
+    }
+  ],
+  "drops_mobs": [
+    {
+      "id": "blaze_rod",
+      "displayName": "Vara de Blaze",
+      "material": "BLAZE_ROD",
+      "icon": "BLAZE_ROD",
+      "amount": 1,
+      "buy": 90,
+      "sell": 20
+    },
+    {
+      "id": "shulker_shell",
+      "displayName": "Casco de Shulker",
+      "material": "SHULKER_SHELL",
+      "icon": "SHULKER_SHELL",
+      "amount": 1,
+      "buy": 260,
+      "sell": 70
+    },
+    {
+      "id": "ender_pearl",
+      "displayName": "Perola do Ender",
+      "material": "ENDER_PEARL",
+      "icon": "ENDER_PEARL",
+      "amount": 1,
+      "buy": 40,
+      "sell": 10
+    },
+    {
+      "id": "gunpowder",
+      "displayName": "Polvora",
+      "material": "GUNPOWDER",
+      "icon": "GUNPOWDER",
+      "amount": 1,
+      "buy": 30,
+      "sell": 8
+    }
+  ],
+  "comida": [
+    {
+      "id": "bread",
+      "displayName": "Pao",
+      "material": "BREAD",
+      "amount": 1,
+      "buy": 12,
+      "sell": 2
+    },
+    {
+      "id": "cooked_beef",
+      "displayName": "Bife Assado",
+      "material": "COOKED_BEEF",
+      "amount": 1,
+      "buy": 22,
+      "sell": 3
+    },
+    {
+      "id": "cooked_chicken",
+      "displayName": "Frango Assado",
+      "material": "COOKED_CHICKEN",
+      "amount": 1,
+      "buy": 20,
+      "sell": 3
+    },
+    {
+      "id": "golden_carrot",
+      "displayName": "Cenoura Dourada",
+      "material": "GOLDEN_CARROT",
+      "amount": 1,
+      "buy": 60,
+      "sell": 8
+    },
+    {
+      "id": "apple",
+      "displayName": "Maca",
+      "material": "APPLE",
+      "amount": 1,
+      "buy": 10,
+      "sell": 1.5
+    }
+  ],
+  "plantacao": [
+    {
+      "id": "wheat",
+      "displayName": "Trigo",
+      "material": "WHEAT",
+      "amount": 1,
+      "buy": 8,
+      "sell": 1
+    },
+    {
+      "id": "carrot",
+      "displayName": "Cenoura",
+      "material": "CARROT",
+      "amount": 1,
+      "buy": 9,
+      "sell": 1
+    },
+    {
+      "id": "potato",
+      "displayName": "Batata",
+      "material": "POTATO",
+      "amount": 1,
+      "buy": 9,
+      "sell": 1
+    },
+    {
+      "id": "beetroot",
+      "displayName": "Beterraba",
+      "material": "BEETROOT",
+      "amount": 1,
+      "buy": 10,
+      "sell": 1
+    },
+    {
+      "id": "pumpkin",
+      "displayName": "Abobora",
+      "material": "PUMPKIN",
+      "amount": 1,
+      "buy": 14,
+      "sell": 2
+    },
+    {
+      "id": "melon_slice",
+      "displayName": "Fatia de Melancia",
+      "material": "MELON_SLICE",
+      "amount": 1,
+      "buy": 8,
+      "sell": 1
+    },
+    {
+      "id": "sugar_cane",
+      "displayName": "Cana de Acucar",
+      "material": "SUGAR_CANE",
+      "amount": 1,
+      "buy": 12,
+      "sell": 1.5
+    },
+    {
+      "id": "wheat_seeds",
+      "displayName": "Semente de Trigo",
+      "material": "WHEAT_SEEDS",
+      "amount": 1,
+      "buy": 2,
+      "sell": 0.15
+    },
+    {
+      "id": "beetroot_seeds",
+      "displayName": "Semente de Beterraba",
+      "material": "BEETROOT_SEEDS",
+      "amount": 1,
+      "buy": 2.5,
+      "sell": 0.2
+    },
+    {
+      "id": "pumpkin_seeds",
+      "displayName": "Semente de Abobora",
+      "material": "PUMPKIN_SEEDS",
+      "amount": 1,
+      "buy": 3,
+      "sell": 0.25
+    },
+    {
+      "id": "melon_seeds",
+      "displayName": "Semente de Melancia",
+      "material": "MELON_SEEDS",
+      "amount": 1,
+      "buy": 3,
+      "sell": 0.25
+    }
+  ],
+  "livros_encantados": [
+    {
+      "id": "protection_4",
+      "displayName": "Livro Protecao IV",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "protection",
+      "enchantLevel": 4,
+      "buy": 3600,
+      "sell": 180
+    },
+    {
+      "id": "unbreaking_3",
+      "displayName": "Livro Inquebravel III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "unbreaking",
+      "enchantLevel": 3,
+      "buy": 3200,
+      "sell": 160
+    },
+    {
+      "id": "looting_3",
+      "displayName": "Livro Saque III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "looting",
+      "enchantLevel": 3,
+      "buy": 3400,
+      "sell": 170
+    },
+    {
+      "id": "mending_1",
+      "displayName": "Livro Remendo I",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "mending",
+      "enchantLevel": 1,
+      "buy": 7000,
+      "sell": 350
+    },
+    {
+      "id": "breach_4",
+      "displayName": "Livro Brecha IV",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "breach",
+      "enchantLevel": 4,
+      "buy": 4200,
+      "sell": 220
+    },
+    {
+      "id": "density_5",
+      "displayName": "Livro Densidade V",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "density",
+      "enchantLevel": 5,
+      "buy": 4600,
+      "sell": 240
+    },
+    {
+      "id": "wind_burst_3",
+      "displayName": "Livro Rajada de Vento III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "wind_burst",
+      "enchantLevel": 3,
+      "buy": 5200,
+      "sell": 260
+    },
+    {
+      "id": "loyalty_3",
+      "displayName": "Livro Lealdade III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "loyalty",
+      "enchantLevel": 3,
+      "buy": 3300,
+      "sell": 160
+    },
+    {
+      "id": "impaling_5",
+      "displayName": "Livro Empalamento V",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "impaling",
+      "enchantLevel": 5,
+      "buy": 3900,
+      "sell": 200
+    },
+    {
+      "id": "riptide_3",
+      "displayName": "Livro Correnteza III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "riptide",
+      "enchantLevel": 3,
+      "buy": 3600,
+      "sell": 180
+    },
+    {
+      "id": "channeling_1",
+      "displayName": "Livro Canalizacao I",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "channeling",
+      "enchantLevel": 1,
+      "buy": 3000,
+      "sell": 140
+    },
+    {
+      "id": "fortune_3",
+      "displayName": "Livro Fortuna III",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "fortune",
+      "enchantLevel": 3,
+      "buy": 4300,
+      "sell": 230
+    },
+    {
+      "id": "efficiency_5",
+      "displayName": "Livro Eficiencia V",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "efficiency",
+      "enchantLevel": 5,
+      "buy": 4800,
+      "sell": 250
+    },
+    {
+      "id": "silk_touch_1",
+      "displayName": "Livro Toque Suave I",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "silk_touch",
+      "enchantLevel": 1,
+      "buy": 4100,
+      "sell": 220
+    },
+    {
+      "id": "flame_1",
+      "displayName": "Livro Chama I",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "flame",
+      "enchantLevel": 1,
+      "buy": 2800,
+      "sell": 130
+    },
+    {
+      "id": "fire_aspect_2",
+      "displayName": "Livro Aspecto de Fogo II",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "fire_aspect",
+      "enchantLevel": 2,
+      "buy": 3000,
+      "sell": 150
+    },
+    {
+      "id": "infinity_1",
+      "displayName": "Livro Infinidade I",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "infinity",
+      "enchantLevel": 1,
+      "buy": 6200,
+      "sell": 300
+    },
+    {
+      "id": "power_5",
+      "displayName": "Livro Forca V",
+      "material": "ENCHANTED_BOOK",
+      "amount": 1,
+      "enchant": "power",
+      "enchantLevel": 5,
+      "buy": 5000,
+      "sell": 260
+    }
+  ],
+  "madeiras": [
+    {
+      "id": "oak_log",
+      "displayName": "Tronco de Carvalho",
+      "material": "OAK_LOG",
+      "icon": "OAK_LOG",
+      "amount": 1,
+      "buy": 12,
+      "sell": 2
+    },
+    {
+      "id": "spruce_log",
+      "displayName": "Tronco de Pinheiro",
+      "material": "SPRUCE_LOG",
+      "icon": "SPRUCE_LOG",
+      "amount": 1,
+      "buy": 14,
+      "sell": 2
+    },
+    {
+      "id": "dark_oak_log",
+      "displayName": "Tronco Escuro",
+      "material": "DARK_OAK_LOG",
+      "icon": "DARK_OAK_LOG",
+      "amount": 1,
+      "buy": 16,
+      "sell": 2.2
+    },
+    {
+      "id": "birch_log",
+      "displayName": "Tronco de Betula",
+      "material": "BIRCH_LOG",
+      "icon": "BIRCH_LOG",
+      "amount": 1,
+      "buy": 14,
+      "sell": 2
+    },
+    {
+      "id": "jungle_log",
+      "displayName": "Tronco da Selva",
+      "material": "JUNGLE_LOG",
+      "icon": "JUNGLE_LOG",
+      "amount": 1,
+      "buy": 15,
+      "sell": 2.1
+    },
+    {
+      "id": "acacia_log",
+      "displayName": "Tronco de Acacia",
+      "material": "ACACIA_LOG",
+      "icon": "ACACIA_LOG",
+      "amount": 1,
+      "buy": 15,
+      "sell": 2.1
+    },
+    {
+      "id": "mangrove_log",
+      "displayName": "Tronco de Mangue",
+      "material": "MANGROVE_LOG",
+      "icon": "MANGROVE_LOG",
+      "amount": 1,
+      "buy": 17,
+      "sell": 2.3
+    },
+    {
+      "id": "cherry_log",
+      "displayName": "Tronco de Cerejeira",
+      "material": "CHERRY_LOG",
+      "icon": "CHERRY_LOG",
+      "amount": 1,
+      "buy": 17,
+      "sell": 2.3
+    }
+  ],
+  "loja_vip": [
+    {
+      "id": "kit_essencia",
+      "displayName": "Kit Magna Essencia I",
+      "material": "CHEST",
+      "icon": "AMETHYST_SHARD",
+      "amount": 1,
+      "buy": 0,
+      "sell": 0,
+      "lore": [
+        "&7Preco real: &fR$1,00",
+        "&7Pagamento: &fDiscord"
+      ]
+    },
+    {
+      "id": "kit_soberano",
+      "displayName": "Kit Magna Soberano",
+      "material": "CHEST",
+      "icon": "NETHER_STAR",
+      "amount": 1,
+      "buy": 0,
+      "sell": 0,
+      "lore": [
+        "&7Preco real: &fR$2,00",
+        "&7Pagamento: &fDiscord"
+      ]
+    },
+    {
+      "id": "kit_invocador",
+      "displayName": "Kit Invocador",
+      "material": "CHEST",
+      "icon": "TOTEM_OF_UNDYING",
+      "amount": 1,
+      "buy": 0,
+      "sell": 0,
+      "lore": [
+        "&7Preco real: &fConsulte no Discord",
+        "&7Pagamento: &fDiscord"
+      ]
+    },
+    {
+      "id": "picareta_soberana_silk",
+      "displayName": "Picareta Soberana (Silk)",
+      "material": "DIAMOND_PICKAXE",
+      "icon": "DIAMOND_PICKAXE",
+      "amount": 1,
+      "buy": 0,
+      "sell": 0,
+      "lore": [
+        "&7Preco real: &fR$0,50",
+        "&7Pagamento: &fDiscord"
+      ],
+      "enchants": {
+        "efficiency": 10,
+        "silk_touch": 1
+      }
+    }
+  ]
+}

@@ -32,6 +32,8 @@ horizon-world = { path = "../horizon-world" }
 horizon-protocol = { path = "../horizon-protocol" }
 # server.properties, eula.txt and the user lists, shared with horizon-server.
 horizon-server-files = { path = "../horizon-server-files" }
+horizon-server-plugin-loader = { path = "../../server-plugins/loader", optional = true }
+horizon-server-plugin-api = { path = "../../server-plugins/api", optional = true }
 # The dedicated server's anticheat, off unless server.toml's [anticheat] turns it on (docs/anticheat.md).
 horizon-anticheat = { path = "../horizon-anticheat" }
 # The dedicated server's chat filter: [chat_filter], the slur list, mutes (docs/chat-filter.md);
@@ -124,6 +126,8 @@ controllers = ["horizon-client-lib/controllers", "dep:gilrs", "dep:horizon-duals
 # every place it gates. Without it (`--no-default-features --features audio,controllers`) the
 # client is best effort: CI builds only the default.
 horizon-extras = ["horizon-client-render/horizon-extras", "friends"]
+# Dedicated-server runtime plugin loading through the versioned C ABI.
+server-plugins = ["dep:horizon-server-plugin-loader", "dep:horizon-server-plugin-api"]
 # Play with Friends: sharing a world behind an invite code (game/friends.rs). Joining one is
 # horizon-friends' `game` side, which horizon-official registers (`horizon_hooks::tunnel`).
 friends = ["dep:horizon-friends"]

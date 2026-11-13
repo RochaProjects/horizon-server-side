@@ -1,5 +1,7 @@
 # AuraEssentials para Horizon
 
+> **Legado:** este projeto usa mixins/trait mods ligados ao binário e não faz parte do host atual de plugins em runtime. O workflow de release não o injeta mais no engine. O plugin separado em `server-plugins/aura-loja` é o começo da substituição; não copie os mixins deste diretório para o build do servidor.
+
 Mod nativo de servidor em Rust, feito para o Horizon 26.3. O projeto começa com o sistema de locais pessoais e foi organizado para crescer para teleportes, terrenos, lobby protegido, loja e administração.
 
 ## Comandos de locais

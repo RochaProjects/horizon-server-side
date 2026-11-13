@@ -1533,6 +1533,7 @@ dependencies = [
  "horizon-perf-format",
  "horizon-protocol",
  "horizon-server-files",
+ "horizon-server-plugin-loader",
  "horizon-shader-api",
  "horizon-shaders",
  "horizon-system",
@@ -1967,6 +1968,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "horizon-plugin-aura-loja"
+version = "0.1.0"
+dependencies = [
+ "horizon-server-plugin-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "horizon-polytone"
 version = "0.1.0"
 dependencies = [
@@ -2074,6 +2084,19 @@ dependencies = [
  "horizon-world",
  "log",
  "ureq",
+]
+
+[[package]]
+name = "horizon-server-plugin-api"
+version = "0.1.0"
+
+[[package]]
+name = "horizon-server-plugin-loader"
+version = "0.1.0"
+dependencies = [
+ "horizon-server-plugin-api",
+ "libloading",
+ "log",
 ]
 
 [[package]]

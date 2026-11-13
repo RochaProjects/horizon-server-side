@@ -329,6 +329,8 @@ mod native_registry_name;
 mod native_reload_listeners;
 mod native_scene;
 mod native_server;
+#[cfg(feature = "server-plugins")]
+mod server_plugins;
 mod native_shaders;
 mod native_slot_roles;
 mod native_structures;

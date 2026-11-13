@@ -4354,6 +4354,8 @@ impl Game<'_> {
     /// name vanilla has is left out. Asked again after a mod calls
     /// `native_refresh_commands`. API 8.
     pub(super) fn native_register_commands(&mut self, commands: &mut Vec<NativeCommand>) {
+        #[cfg(feature = "server-plugins")]
+        super::server_plugins::register_commands(self, commands);
         mod_api::dispatch_register_commands(self, mod_api::mods(), commands);
     }
     /// A player's command on the server (`Commands.performCommand`),
@@ -4370,6 +4372,10 @@ impl Game<'_> {
         ran: &mut bool,
     ) {
         mod_api::dispatch_perform_command(self, mod_api::mods(), player, command, ran);
+        #[cfg(feature = "server-plugins")]
+        if !*ran {
+            super::server_plugins::perform_command(self, player, command, ran);
+        }
     }
     /// A player takes an item from an armor stand or puts one on it
     /// (`ArmorStand.interactAt`, after the stand's disabled-slot checks and
@@ -8061,11 +8067,15 @@ impl Game<'_> {
         mode: i32,
     ) {
         mod_api::dispatch_menu_clicked(self, mod_api::mods(), uuid, window, slot, button, mode);
+        #[cfg(feature = "server-plugins")]
+        super::server_plugins::menu_clicked(self, uuid, window, slot, button, mode);
     }
     /// A menu a mod opened closed: the player closed it, the server or a mod
     /// opened another, or the player left. API 10.
     pub(super) fn native_menu_closed(&mut self, uuid: u128, window: i32) {
         mod_api::dispatch_menu_closed(self, mod_api::mods(), uuid, window);
+        #[cfg(feature = "server-plugins")]
+        super::server_plugins::menu_closed(self, uuid, window);
     }
     /// An item's tooltip, wherever the game shows one (slots, the creative
     /// tabs, the recipe book, chat's hover): the stack, with its components
@@ -8443,6 +8453,17 @@ impl Game<'_> {
         canceled: &mut bool,
     ) {
         mod_api::dispatch_destroy_block(self, mod_api::mods(), pos, state, canceled);
+        #[cfg(feature = "server-plugins")]
+        if let Some(player) = self.native_acting_player() {
+            *canceled |= super::server_plugins::dispatch_event(
+                self,
+                horizon_server_plugin_api::event::BLOCK_BREAK,
+                player.uuid,
+                &player.name,
+                pos,
+                state.0,
+            );
+        }
     }
     /// A player placed `stack` as the block `state` at `pos`: where
     /// `BlockItem.place` set it, before the stack shrinks. It only hears; a
@@ -8658,6 +8679,15 @@ impl Game<'_> {
     /// Once a join, with no player's state swapped in. Server-side. API 57.
     pub(super) fn native_player_logged_in(&mut self, player: u128, name: &str) {
         mod_api::dispatch_player_logged_in(self, mod_api::mods(), player, name);
+        #[cfg(feature = "server-plugins")]
+        super::server_plugins::dispatch_event(
+            self,
+            horizon_server_plugin_api::event::PLAYER_JOIN,
+            player,
+            name,
+            [0; 3],
+            0,
+        );
     }
     /// `player` (`name`) left the game (NeoForge's `PlayerLoggedOutEvent`), by
     /// any path: a lost connection, a kick, the server stopping or failing.
@@ -8667,6 +8697,15 @@ impl Game<'_> {
     /// Server-side. API 57.
     pub(super) fn native_player_logged_out(&mut self, player: u128, name: &str) {
         mod_api::dispatch_player_logged_out(self, mod_api::mods(), player, name);
+        #[cfg(feature = "server-plugins")]
+        super::server_plugins::dispatch_event(
+            self,
+            horizon_server_plugin_api::event::PLAYER_QUIT,
+            player,
+            name,
+            [0; 3],
+            0,
+        );
     }
     /// `player` (`name`) respawned (NeoForge's `PlayerRespawnEvent`): at the
     /// end of `PlayerList.respawn`, once they are placed and their health,
