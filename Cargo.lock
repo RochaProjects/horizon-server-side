@@ -1567,6 +1567,7 @@ name = "horizon-client-core"
 version = "0.1.0"
 dependencies = [
  "horizon-world",
+ "serde",
  "serde_json",
 ]
 
