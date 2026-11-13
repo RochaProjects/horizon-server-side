@@ -1533,6 +1533,7 @@ dependencies = [
  "horizon-perf-format",
  "horizon-protocol",
  "horizon-server-files",
+ "horizon-server-plugin-api",
  "horizon-server-plugin-loader",
  "horizon-shader-api",
  "horizon-shaders",
@@ -2097,6 +2098,8 @@ dependencies = [
  "horizon-server-plugin-api",
  "libloading",
  "log",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

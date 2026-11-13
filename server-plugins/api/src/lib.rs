@@ -3,10 +3,10 @@
 
 use std::ffi::c_void;
 
-pub const ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 2;
 pub type ByteSlice = *const u8;
 
-/// Stable numeric identifiers for generic server events in ABI v1.
+/// Stable numeric identifiers for generic server events in ABI v2.
 pub mod event {
     pub const PLAYER_JOIN: u32 = 1;
     pub const PLAYER_QUIT: u32 = 2;
@@ -14,8 +14,17 @@ pub mod event {
     pub const MENU_CLOSED: u32 = 4;
 }
 
+/// Return values from `HostApiV2::get_balance` and `HostApiV2::transact`.
+pub mod result {
+    pub const OK: i32 = 1;
+    pub const INSUFFICIENT_BALANCE: i32 = 2;
+    pub const ITEMS_REJECTED: i32 = 3;
+    pub const STORAGE_ERROR: i32 = 4;
+    pub const INVALID_REQUEST: i32 = 5;
+}
+
 #[repr(C)]
-pub struct ServerEventV1 {
+pub struct ServerEventV2 {
     pub kind: u32,
     pub player_high: u64,
     pub player_low: u64,
@@ -33,7 +42,7 @@ pub struct ServerEventV1 {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct MenuItemV1 {
+pub struct MenuItemV2 {
     pub slot: u32,
     pub item: ByteSlice,
     pub item_len: usize,
@@ -49,47 +58,84 @@ pub struct MenuItemV1 {
 }
 
 #[repr(C)]
-pub struct HostApiV1 {
+#[derive(Clone, Copy)]
+pub struct ItemDeltaV2 {
+    pub item: ByteSlice,
+    pub item_len: usize,
+    /// Positive adds plain items; negative removes them. Zero is invalid.
+    pub delta: i32,
+}
+
+#[repr(C)]
+pub struct HostApiV2 {
     pub abi_version: u32,
     pub context: *mut c_void,
-    pub register_command: Option<unsafe extern "C" fn(*mut c_void, ByteSlice, usize) -> i32>,
-    pub send_message: Option<unsafe extern "C" fn(*mut c_void, u64, u64, ByteSlice, usize) -> i32>,
+    pub register_command: Option<unsafe extern "C-unwind" fn(*mut c_void, ByteSlice, usize) -> i32>,
+    pub send_message:
+        Option<unsafe extern "C-unwind" fn(*mut c_void, u64, u64, ByteSlice, usize) -> i32>,
     pub open_menu: Option<
-        unsafe extern "C" fn(
+        unsafe extern "C-unwind" fn(
             *mut c_void,
             u64,
             u64,
             ByteSlice,
             usize,
             u8,
-            *const MenuItemV1,
+            *const MenuItemV2,
+            usize,
+        ) -> i32,
+    >,
+    pub get_balance: Option<
+        unsafe extern "C-unwind" fn(*mut c_void, u64, u64, ByteSlice, usize, *mut i64) -> i32,
+    >,
+    /// Apply a balance delta and item deltas as one server-thread transaction.
+    /// Returns `result::OK`, `INSUFFICIENT_BALANCE`, `ITEMS_REJECTED`,
+    /// `STORAGE_ERROR`, or `INVALID_REQUEST`.
+    pub transact: Option<
+        unsafe extern "C-unwind" fn(
+            *mut c_void,
+            u64,
+            u64,
+            ByteSlice,
+            usize,
+            i64,
+            *const ItemDeltaV2,
             usize,
         ) -> i32,
     >,
 }
 
 #[repr(C)]
-pub struct PluginV1 {
+pub struct PluginV2 {
     pub abi_version: u32,
     pub name: ByteSlice,
     pub name_len: usize,
-    pub create: Option<unsafe extern "C" fn() -> *mut c_void>,
-    pub destroy: Option<unsafe extern "C" fn(*mut c_void)>,
-    pub register_commands: Option<unsafe extern "C" fn(*mut c_void, *const HostApiV1)>,
+    pub create: Option<unsafe extern "C-unwind" fn() -> *mut c_void>,
+    pub destroy: Option<unsafe extern "C-unwind" fn(*mut c_void)>,
+    pub register_commands: Option<unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV2)>,
     /// Return nonzero when the plugin handled this command.
     pub command: Option<
-        unsafe extern "C" fn(*mut c_void, *const HostApiV1, u64, u64, ByteSlice, usize) -> u8,
+        unsafe extern "C-unwind" fn(
+            *mut c_void,
+            *const HostApiV2,
+            u64,
+            u64,
+            ByteSlice,
+            usize,
+        ) -> u8,
     >,
-    pub menu_click:
-        Option<unsafe extern "C" fn(*mut c_void, *const HostApiV1, u64, u64, i32, i32, i32, i32)>,
+    pub menu_click: Option<
+        unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV2, u64, u64, i32, i32, i32, i32),
+    >,
     /// Return nonzero to cancel a cancellable event such as `BLOCK_BREAK`.
-    pub event:
-        Option<unsafe extern "C" fn(*mut c_void, *const HostApiV1, *const ServerEventV1) -> u8>,
+    pub event: Option<
+        unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV2, *const ServerEventV2) -> u8,
+    >,
 }
 
 // Plugin descriptors are immutable static tables; pointer fields reference
 // static plugin-owned metadata and are read only while its library is loaded.
-unsafe impl Sync for PluginV1 {}
+unsafe impl Sync for PluginV2 {}
 
-/// Every dynamic plugin exports this symbol and returns a pointer to a static [`PluginV1`].
-pub type PluginEntryV1 = unsafe extern "C" fn() -> *const PluginV1;
+/// Every dynamic plugin exports this symbol and returns a pointer to a static [`PluginV2`].
+pub type PluginEntryV2 = unsafe extern "C-unwind" fn() -> *const PluginV2;

@@ -6,7 +6,7 @@ use super::{
     native_server::{NativeCommand, NativeServerPlayer},
 };
 use horizon_client::{items::ItemStack, lan::data::component_nbt, text::Text};
-use horizon_server_plugin_loader::{Event, Host, MenuItem};
+use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem};
 use std::path::Path;
 
 struct GameHost<'g, 'a, 'c> {
@@ -83,6 +83,20 @@ impl Host for GameHost<'_, '_, '_> {
         }
         self.game
             .native_open_menu(player, rows, Text::literal(title), stacks)
+    }
+
+    fn transact_items(
+        &mut self,
+        player: u128,
+        items: &[ItemDelta],
+        finish: &mut dyn FnMut(bool) -> bool,
+    ) -> Result<(), ()> {
+        let changes: Vec<_> = items
+            .iter()
+            .map(|item| (item.item.clone(), item.delta))
+            .collect();
+        self.game
+            .native_plugin_item_transaction(player, &changes, finish)
     }
 }
 

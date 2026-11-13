@@ -329,8 +329,6 @@ mod native_registry_name;
 mod native_reload_listeners;
 mod native_scene;
 mod native_server;
-#[cfg(feature = "server-plugins")]
-mod server_plugins;
 mod native_shaders;
 mod native_slot_roles;
 mod native_structures;
@@ -428,6 +426,8 @@ mod sculk_fixture;
 mod seats;
 mod server_links;
 mod server_packs;
+#[cfg(feature = "server-plugins")]
+mod server_plugins;
 mod server_travel;
 mod shader_packs;
 mod sheep_dye;

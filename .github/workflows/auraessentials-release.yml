@@ -64,7 +64,7 @@ jobs:
           cp target/release/libhorizon_plugin_aura_loja.so dist/auraessentials-server/plugins/
           cp research-lock.json LICENSE dist/auraessentials-server/
           chmod +x dist/auraessentials-server/horizon-server dist/auraessentials-server/horizon-prepare dist/auraessentials-server/horizon-engine
-          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":1,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/plugin-release.json
+          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":2,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/plugin-release.json
           tar -czf dist/aura-essentials-server-linux-x86_64.tar.gz -C dist auraessentials-server
           sha256sum dist/aura-essentials-server-linux-x86_64.tar.gz > dist/aura-essentials-server-linux-x86_64.tar.gz.sha256
 
@@ -79,6 +79,6 @@ jobs:
           gh release create "$tag" \
             --repo "$GITHUB_REPOSITORY" \
             --title "AuraEssentials ${tag#aura-v}" \
-            --notes "Servidor Horizon 26.3 vanilla com host de plugins C ABI v1 e o plugin Aura Loja em biblioteca .so separada. Linux x86_64; inclui horizon-server, horizon-engine, horizon-prepare e plugins/libhorizon_plugin_aura_loja.so. Compras e vendas ainda não estão conectadas à economia." \
+            --notes "Servidor Horizon 26.3 vanilla com host de plugins C ABI v2 e o plugin Aura Loja em biblioteca .so separada. Linux x86_64; inclui horizon-server, horizon-engine, horizon-prepare e plugins/libhorizon_plugin_aura_loja.so. Compras e vendas usam saldos persistidos em plugins/balances.json." \
             dist/aura-essentials-server-linux-x86_64.tar.gz \
             dist/aura-essentials-server-linux-x86_64.tar.gz.sha256

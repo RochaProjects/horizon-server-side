@@ -10,3 +10,5 @@ description = "Runtime loader and isolated ABI boundary for Horizon dedicated-se
 horizon-server-plugin-api = { path = "../api" }
 libloading = "0.8"
 log = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

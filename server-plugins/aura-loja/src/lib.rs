@@ -1,6 +1,9 @@
 //! Loja em português baseada na lista de itens e no fluxo de telas do AuraEssentials Java.
 
-use horizon_server_plugin_api::{ABI_VERSION, HostApiV1, MenuItemV1, PluginV1, ServerEventV1};
+use horizon_server_plugin_api::{
+    ABI_VERSION, HostApiV2, ItemDeltaV2, MenuItemV2, PluginV2, ServerEventV2,
+    result as transaction_result,
+};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -17,8 +20,14 @@ struct ShopItem {
     display_name: String,
     material: String,
     icon: Option<String>,
+    #[serde(default = "one")]
+    amount: u32,
     buy: f64,
     sell: f64,
+}
+
+fn one() -> u32 {
+    1
 }
 
 #[derive(Clone)]
@@ -118,7 +127,7 @@ fn spec_lore(mut item: ItemSpec, lore: Vec<String>) -> ItemSpec {
 }
 
 fn show_menu(
-    host: &HostApiV1,
+    host: &HostApiV2,
     player: u128,
     title: &str,
     rows: u8,
@@ -135,7 +144,7 @@ fn show_menu(
             let (name, name_len) = bytes(&it.name);
             let (color, color_len) = bytes(&it.color);
             let (lore, lore_len) = bytes(lore_text);
-            MenuItemV1 {
+            MenuItemV2 {
                 slot: it.slot as u32,
                 item,
                 item_len,
@@ -166,7 +175,7 @@ fn show_menu(
     (window >= 0).then_some(window)
 }
 
-fn message(host: &HostApiV1, player: u128, text: &str) {
+fn message(host: &HostApiV2, player: u128, text: &str) {
     if let Some(send) = host.send_message {
         let (high, low) = ((player >> 64) as u64, player as u64);
         // SAFETY: text remains valid for this synchronous call.
@@ -174,7 +183,113 @@ fn message(host: &HostApiV1, player: u128, text: &str) {
     }
 }
 
-fn open_categories(state: &mut State, host: &HostApiV1, player: u128) {
+fn transact_shop_item(
+    host: &HostApiV2,
+    player: u128,
+    item: &ShopItem,
+    currency: &str,
+    quantity: u32,
+    buying: bool,
+) -> i32 {
+    let Some(transact) = host.transact else {
+        return transaction_result::STORAGE_ERROR;
+    };
+    let units = if buying { item.buy } else { item.sell };
+    if !units.is_finite() || units < 0.0 {
+        return transaction_result::INVALID_REQUEST;
+    }
+    let balance_delta = (units * f64::from(quantity) * 100.0).round();
+    if balance_delta > i64::MAX as f64 {
+        return transaction_result::INVALID_REQUEST;
+    }
+    let amount = item.amount.checked_mul(quantity);
+    let Some(amount) = amount.and_then(|n| i32::try_from(n).ok()) else {
+        return transaction_result::INVALID_REQUEST;
+    };
+    if amount == 0 {
+        return transaction_result::INVALID_REQUEST;
+    }
+    let material = item.material.to_ascii_lowercase();
+    let item_id = format!("minecraft:{material}");
+    let (item_ptr, item_len) = bytes(&item_id);
+    let (currency_ptr, currency_len) = bytes(currency);
+    let delta = if buying {
+        balance_delta as i64 * -1
+    } else {
+        balance_delta as i64
+    };
+    let item_delta = ItemDeltaV2 {
+        item: item_ptr,
+        item_len,
+        delta: if buying { amount } else { -amount },
+    };
+    let (high, low) = ((player >> 64) as u64, player as u64);
+    // SAFETY: the API pointers and item id remain alive for this synchronous host call.
+    unsafe {
+        transact(
+            host.context,
+            high,
+            low,
+            currency_ptr,
+            currency_len,
+            delta,
+            &item_delta,
+            1,
+        )
+    }
+}
+
+fn trade_message(host: &HostApiV2, player: u128, result: i32, buying: bool) {
+    let text = match result {
+        transaction_result::OK if buying => "Compra concluída.",
+        transaction_result::OK => "Venda concluída.",
+        transaction_result::INSUFFICIENT_BALANCE => "Saldo insuficiente.",
+        transaction_result::ITEMS_REJECTED if buying => {
+            "Não há espaço suficiente no inventário para receber os itens."
+        }
+        transaction_result::ITEMS_REJECTED => "Você não tem os itens necessários no inventário.",
+        transaction_result::STORAGE_ERROR => {
+            "Falha ao salvar a transação. Confira os logs do servidor."
+        }
+        _ => "Não foi possível concluir a transação.",
+    };
+    message(host, player, text);
+}
+
+fn balance_text(host: &HostApiV2, player: u128, currency: &str) -> Option<String> {
+    let get = host.get_balance?;
+    let (currency_ptr, currency_len) = bytes(currency);
+    let (high, low) = ((player >> 64) as u64, player as u64);
+    let mut balance = 0_i64;
+    // SAFETY: output and currency bytes live through this synchronous host call.
+    let result = unsafe {
+        get(
+            host.context,
+            high,
+            low,
+            currency_ptr,
+            currency_len,
+            &mut balance,
+        )
+    };
+    (result == transaction_result::OK).then(|| price_units(balance))
+}
+
+fn price_units(units: i64) -> String {
+    let sign = if units < 0 { "-" } else { "" };
+    let absolute = units.unsigned_abs();
+    let whole = absolute / 100;
+    let fraction = absolute % 100;
+    if fraction == 0 {
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole},{fraction:02}")
+            .trim_end_matches('0')
+            .to_owned()
+    }
+}
+
+fn open_categories(state: &mut State, host: &HostApiV2, player: u128) {
     let mut mapping = HashMap::new();
     let items = state
         .categories
@@ -213,7 +328,7 @@ fn open_categories(state: &mut State, host: &HostApiV1, player: u128) {
 
 fn open_items(
     state: &mut State,
-    host: &HostApiV1,
+    host: &HostApiV2,
     player: u128,
     category: usize,
     requested_page: usize,
@@ -271,7 +386,7 @@ fn open_items(
             &format!("minecraft:{icon}"),
             &item.display_name,
             item_color,
-            1,
+            item.amount.clamp(1, 64),
         );
         items.push(spec_lore(product, lore));
     }
@@ -321,7 +436,7 @@ fn open_items(
 
 fn open_detail(
     state: &mut State,
-    host: &HostApiV1,
+    host: &HostApiV2,
     player: u128,
     category: usize,
     page: usize,
@@ -342,6 +457,31 @@ fn open_detail(
     } else {
         "moedas"
     };
+    let currency_id = if state.categories[category].id == "loja_vip" {
+        "aura:credits"
+    } else {
+        "aura:coins"
+    };
+    let mut quantity_lore = vec![
+        format!(
+            "§7Comprar: §6{} {currency}",
+            price(item.buy * f64::from(quantity))
+        ),
+        format!(
+            "§7Vender: §6{} {currency}",
+            price(item.sell * f64::from(quantity))
+        ),
+        format!("§7Itens por pacote: §f{}", item.amount),
+    ];
+    if let Some(balance) = balance_text(host, player, currency_id) {
+        quantity_lore.push(format!("§7Saldo: §6{balance} {currency}"));
+    }
+    quantity_lore.extend([
+        "§8----------------".into(),
+        "§7Ajuste a quantidade nos botões".into(),
+        format!("§aClique para comprar {quantity}x"),
+        format!("§cClique para vender {quantity}x"),
+    ]);
     let mut items = vec![
         spec(0, "minecraft:gray_stained_glass_pane", " ", "dark_gray", 1),
         spec(
@@ -349,7 +489,7 @@ fn open_detail(
             &format!("minecraft:{material}"),
             &item.display_name,
             "yellow",
-            1,
+            item.amount.clamp(1, 64),
         ),
         spec(10, "minecraft:red_stained_glass_pane", "−64", "red", 1),
         spec(11, "minecraft:orange_stained_glass_pane", "−16", "gold", 1),
@@ -368,20 +508,7 @@ fn open_detail(
                 "yellow",
                 1,
             ),
-            vec![
-                format!(
-                    "§7Comprar: §6{} {currency}",
-                    price(item.buy * f64::from(quantity))
-                ),
-                format!(
-                    "§7Vender: §6{} {currency}",
-                    price(item.sell * f64::from(quantity))
-                ),
-                "§8----------------".into(),
-                "§7Ajuste a quantidade nos botões".into(),
-                format!("§aClique para comprar {quantity}x"),
-                format!("§cClique para vender {quantity}x"),
-            ],
+            quantity_lore,
         ),
         spec(
             14,
@@ -433,20 +560,20 @@ fn price(value: f64) -> String {
         format!("{value:.2}")
             .trim_end_matches('0')
             .trim_end_matches('.')
-            .into()
+            .replace('.', ",")
     }
 }
 
-unsafe extern "C" fn create() -> *mut c_void {
+unsafe extern "C-unwind" fn create() -> *mut c_void {
     Box::into_raw(Box::new(())) as *mut c_void
 }
-unsafe extern "C" fn destroy(state: *mut c_void) {
+unsafe extern "C-unwind" fn destroy(state: *mut c_void) {
     if !state.is_null() {
         unsafe { drop(Box::from_raw(state.cast::<()>())) };
     }
 }
 
-unsafe extern "C" fn register_commands(_: *mut c_void, host: *const HostApiV1) {
+unsafe extern "C-unwind" fn register_commands(_: *mut c_void, host: *const HostApiV2) {
     if host.is_null() {
         return;
     }
@@ -457,9 +584,9 @@ unsafe extern "C" fn register_commands(_: *mut c_void, host: *const HostApiV1) {
     }
 }
 
-unsafe extern "C" fn command(
+unsafe extern "C-unwind" fn command(
     _: *mut c_void,
-    host: *const HostApiV1,
+    host: *const HostApiV2,
     high: u64,
     low: u64,
     line: *const u8,
@@ -482,9 +609,9 @@ unsafe extern "C" fn command(
     1
 }
 
-unsafe extern "C" fn menu_click(
+unsafe extern "C-unwind" fn menu_click(
     _: *mut c_void,
-    host: *const HostApiV1,
+    host: *const HostApiV2,
     high: u64,
     low: u64,
     window: i32,
@@ -522,11 +649,10 @@ unsafe extern "C" fn menu_click(
                 open_items(&mut state, host, player, category, page + 1);
             } else if let Some(item) = slots.get(&slot).copied() {
                 if state.categories[category].id == "loja_vip" {
-                    message(
-                        host,
-                        player,
-                        "A compra VIP ainda não está conectada ao saldo de Créditos. Nenhum saldo foi alterado.",
-                    );
+                    let product = state.categories[category].items[item].clone();
+                    let result =
+                        transact_shop_item(host, player, &product, "aura:credits", 1, true);
+                    trade_message(host, player, result, true);
                     open_items(&mut state, host, player, category, page);
                 } else {
                     open_detail(&mut state, host, player, category, page, item, 1);
@@ -553,11 +679,14 @@ unsafe extern "C" fn menu_click(
                 open_detail(&mut state, host, player, category, page, item, next);
             }
             20 => {
-                message(
-                    host,
-                    player,
-                    "A compra ainda não está conectada ao saldo. Nenhum item ou saldo foi alterado.",
-                );
+                let product = state.categories[category].items[item].clone();
+                let currency = if state.categories[category].id == "loja_vip" {
+                    "aura:credits"
+                } else {
+                    "aura:coins"
+                };
+                let result = transact_shop_item(host, player, &product, currency, quantity, true);
+                trade_message(host, player, result, true);
                 state.views.insert(
                     (player, window),
                     View::Detail {
@@ -569,11 +698,14 @@ unsafe extern "C" fn menu_click(
                 );
             }
             24 => {
-                message(
-                    host,
-                    player,
-                    "A venda ainda não está conectada ao saldo. Nenhum item ou saldo foi alterado.",
-                );
+                let product = state.categories[category].items[item].clone();
+                let currency = if state.categories[category].id == "loja_vip" {
+                    "aura:credits"
+                } else {
+                    "aura:coins"
+                };
+                let result = transact_shop_item(host, player, &product, currency, quantity, false);
+                trade_message(host, player, result, false);
                 state.views.insert(
                     (player, window),
                     View::Detail {
@@ -599,7 +731,11 @@ unsafe extern "C" fn menu_click(
     }
 }
 
-unsafe extern "C" fn event(_: *mut c_void, _: *const HostApiV1, event: *const ServerEventV1) -> u8 {
+unsafe extern "C-unwind" fn event(
+    _: *mut c_void,
+    _: *const HostApiV2,
+    event: *const ServerEventV2,
+) -> u8 {
     if event.is_null() {
         return 0;
     }
@@ -618,7 +754,7 @@ unsafe extern "C" fn event(_: *mut c_void, _: *const HostApiV1, event: *const Se
     0
 }
 
-static DESCRIPTOR: PluginV1 = PluginV1 {
+static DESCRIPTOR: PluginV2 = PluginV2 {
     abi_version: ABI_VERSION,
     name: NAME.as_ptr(),
     name_len: NAME.len(),
@@ -631,6 +767,6 @@ static DESCRIPTOR: PluginV1 = PluginV1 {
 };
 
 #[unsafe(no_mangle)]
-pub extern "C" fn horizon_server_plugin_v1() -> *const PluginV1 {
+pub extern "C-unwind" fn horizon_server_plugin_v2() -> *const PluginV2 {
     &DESCRIPTOR
 }

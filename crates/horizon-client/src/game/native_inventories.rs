@@ -685,6 +685,123 @@ impl Game<'_> {
 /// were; each is its `_typed` helper (the same checks) with the error as text.
 #[allow(dead_code, reason = "native mod API (docs/native-mods.md)")]
 impl Game<'_> {
+    /// Applies plain item deltas and commits their paired plugin balance on
+    /// the same server-thread turn. Shops require the player to be online.
+    pub(super) fn native_plugin_item_transaction(
+        &mut self,
+        uuid: u128,
+        changes: &[(String, i32)],
+        finish: &mut dyn FnMut(bool) -> bool,
+    ) -> Result<(), ()> {
+        let inventory = self
+            .native_inventory_typed(uuid, NativeInventoryKind::Player)
+            .map_err(|_| ())?;
+        if !inventory.online {
+            return Err(());
+        }
+        let mut after = inventory.slots.clone();
+        for (item, delta) in changes {
+            let item_info = self.res.items().get(item).ok_or(())?;
+            let max_stack = item_info.max_stack.max(1);
+            if *delta < 0 {
+                let mut remaining = delta.unsigned_abs();
+                for slot in (0..36).chain(std::iter::once(40)) {
+                    let Some(stack) = after.get_mut(slot).and_then(Option::as_mut) else {
+                        continue;
+                    };
+                    if &*stack.item != item || stack.damage != 0 || stack.extra.is_some() {
+                        continue;
+                    }
+                    let taken = stack.count.min(remaining);
+                    stack.count -= taken;
+                    remaining -= taken;
+                    if stack.count == 0 {
+                        after[slot] = None;
+                    }
+                    if remaining == 0 {
+                        break;
+                    }
+                }
+                if remaining != 0 {
+                    return Err(());
+                }
+            } else {
+                let mut remaining = *delta as u32;
+                for slot in (0..36).chain(std::iter::once(40)) {
+                    let Some(stack) = after.get_mut(slot).and_then(Option::as_mut) else {
+                        continue;
+                    };
+                    if &*stack.item == item && stack.damage == 0 && stack.extra.is_none() {
+                        let added = max_stack.saturating_sub(stack.count).min(remaining);
+                        stack.count += added;
+                        remaining -= added;
+                        if remaining == 0 {
+                            break;
+                        }
+                    }
+                }
+                for slot in 0..36 {
+                    if remaining == 0 {
+                        break;
+                    }
+                    if after[slot].is_none() {
+                        let added = max_stack.min(remaining);
+                        after[slot] = Some(ItemStack {
+                            item: item.as_str().into(),
+                            count: added,
+                            damage: 0,
+                            extra: None,
+                        });
+                        remaining -= added;
+                    }
+                }
+                if remaining != 0 {
+                    return Err(());
+                }
+            }
+        }
+
+        let changed: Vec<_> = inventory
+            .slots
+            .iter()
+            .zip(&after)
+            .enumerate()
+            .filter_map(|(slot, (old, new))| {
+                (old != new).then_some((slot, old.clone(), new.clone()))
+            })
+            .collect();
+        if !finish(true) {
+            return Err(());
+        }
+        let mut applied = Vec::new();
+        for (slot, old, new) in changed {
+            if self
+                .native_set_inventory_slot_typed(
+                    uuid,
+                    NativeInventoryKind::Player,
+                    slot,
+                    old.as_ref(),
+                    new.clone(),
+                )
+                .is_err()
+            {
+                for (done_slot, done_old, done_new) in applied.into_iter().rev() {
+                    let _ = self.native_set_inventory_slot_typed(
+                        uuid,
+                        NativeInventoryKind::Player,
+                        done_slot,
+                        done_new.as_ref(),
+                        done_old,
+                    );
+                }
+                let _ = finish(false);
+                return Err(());
+            }
+            applied.push((slot, old, new));
+        }
+        Ok(())
+    }
+
     pub(super) fn native_inventory(
         &self,
         uuid: u128,
