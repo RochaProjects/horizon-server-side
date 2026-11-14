@@ -45,6 +45,7 @@ jobs:
           key: ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-rust-1.99-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-server-plugin-rust-1.99-${{ hashFiles('Cargo.lock') }}-
             ${{ runner.os }}-rust-1.99-
           save-always: true
 
@@ -64,7 +65,8 @@ jobs:
           cp target/release/libhorizon_plugin_aura_loja.so dist/auraessentials-server/plugins/
           cp research-lock.json LICENSE dist/auraessentials-server/
           chmod +x dist/auraessentials-server/horizon-server dist/auraessentials-server/horizon-prepare dist/auraessentials-server/horizon-engine
-          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":2,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/plugin-release.json
+          test -f dist/auraessentials-server/plugins/libhorizon_plugin_aura_loja.so
+          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":2,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/auraessentials-release.json
           tar -czf dist/aura-essentials-server-linux-x86_64.tar.gz -C dist auraessentials-server
           sha256sum dist/aura-essentials-server-linux-x86_64.tar.gz > dist/aura-essentials-server-linux-x86_64.tar.gz.sha256
 
