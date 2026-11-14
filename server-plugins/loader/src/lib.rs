@@ -158,18 +158,17 @@ impl BalanceStore {
         self.available = true;
         if !path.exists() {
             let legacy = plugins_dir.join("balances.json");
-            if legacy.exists() {
-                if let Err(error) =
+            if legacy.exists()
+                && let Err(error) =
                     fs::create_dir_all(&plugin_dir).and_then(|()| fs::rename(&legacy, &path))
-                {
-                    self.available = false;
-                    log::error!(
-                        "Não foi possível migrar {} para {}: {error}",
-                        legacy.display(),
-                        path.display()
-                    );
-                    return;
-                }
+            {
+                self.available = false;
+                log::error!(
+                    "Não foi possível migrar {} para {}: {error}",
+                    legacy.display(),
+                    path.display()
+                );
+                return;
             }
         }
         let bytes = match fs::read(&path) {
