@@ -56,13 +56,22 @@ struct CurrencyConfig {
 
 impl Default for CurrencyConfig {
     fn default() -> Self {
-        Self { normal: default_coins(), vip: default_credits() }
+        Self {
+            normal: default_coins(),
+            vip: default_credits(),
+        }
     }
 }
 
-fn default_title() -> String { "Loja".into() }
-fn default_coins() -> String { "aura:coins".into() }
-fn default_credits() -> String { "aura:credits".into() }
+fn default_title() -> String {
+    "Loja".into()
+}
+fn default_coins() -> String {
+    "aura:coins".into()
+}
+fn default_credits() -> String {
+    "aura:credits".into()
+}
 
 fn one() -> u32 {
     1
@@ -85,7 +94,15 @@ struct State {
 
 impl Default for State {
     fn default() -> Self {
-        Self { loaded: false, config: ShopConfig { title: default_title(), currency: CurrencyConfig::default() }, categories: Vec::new(), views: HashMap::new() }
+        Self {
+            loaded: false,
+            config: ShopConfig {
+                title: default_title(),
+                currency: CurrencyConfig::default(),
+            },
+            categories: Vec::new(),
+            views: HashMap::new(),
+        }
     }
 }
 
@@ -113,32 +130,53 @@ fn state() -> &'static Mutex<State> {
 }
 
 fn plugin_dir() -> Option<PathBuf> {
-    std::env::current_dir().ok().map(|root| root.join("plugins").join("AuraEssentialsHorizon"))
+    std::env::current_dir()
+        .ok()
+        .map(|root| root.join("plugins").join("AuraEssentialsHorizon"))
 }
 
 fn ensure_default_files() -> Result<PathBuf, String> {
-    let dir = plugin_dir().ok_or_else(|| "não foi possível localizar a pasta do servidor".to_owned())?;
-    fs::create_dir_all(&dir).map_err(|error| format!("não foi possível criar {}: {error}", dir.display()))?;
+    let dir =
+        plugin_dir().ok_or_else(|| "não foi possível localizar a pasta do servidor".to_owned())?;
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("não foi possível criar {}: {error}", dir.display()))?;
     let shop = dir.join("shop.json");
     if !shop.exists() {
-        fs::write(&shop, format!("{}\n", serde_json::to_string_pretty(
-            &serde_json::from_str::<serde_json::Value>(DEFAULT_ITEMS_JSON).map_err(|error| error.to_string())?
-        ).map_err(|error| error.to_string())?))
-            .map_err(|error| format!("não foi possível criar shop.json: {error}"))?;
+        fs::write(
+            &shop,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(
+                    &serde_json::from_str::<serde_json::Value>(DEFAULT_ITEMS_JSON)
+                        .map_err(|error| error.to_string())?
+                )
+                .map_err(|error| error.to_string())?
+            ),
+        )
+        .map_err(|error| format!("não foi possível criar shop.json: {error}"))?;
     }
     let config = dir.join("config.json");
     if !config.exists() {
-        fs::write(&config, DEFAULT_CONFIG_JSON).map_err(|error| format!("não foi possível criar config.json: {error}"))?;
+        fs::write(&config, DEFAULT_CONFIG_JSON)
+            .map_err(|error| format!("não foi possível criar config.json: {error}"))?;
     }
     Ok(dir)
 }
 
 fn load_shop() -> Result<Vec<Category>, String> {
     let dir = ensure_default_files()?;
-    let bytes = fs::read(dir.join("shop.json")).map_err(|error| format!("não foi possível ler shop.json: {error}"))?;
-    let data: HashMap<String, Vec<ShopItem>> = serde_json::from_slice(&bytes).map_err(|error| format!("shop.json inválido: {error}"))?;
-    let categories = category_meta().into_iter()
-        .map(|(id, title, icon)| Category { id, title, icon, items: data.get(id).cloned().unwrap_or_default() })
+    let bytes = fs::read(dir.join("shop.json"))
+        .map_err(|error| format!("não foi possível ler shop.json: {error}"))?;
+    let data: HashMap<String, Vec<ShopItem>> =
+        serde_json::from_slice(&bytes).map_err(|error| format!("shop.json inválido: {error}"))?;
+    let categories = category_meta()
+        .into_iter()
+        .map(|(id, title, icon)| Category {
+            id,
+            title,
+            icon,
+            items: data.get(id).cloned().unwrap_or_default(),
+        })
         .collect::<Vec<_>>();
     if categories.iter().all(|category| category.items.is_empty()) {
         return Err("shop.json não tem itens em nenhuma categoria".into());
@@ -148,10 +186,17 @@ fn load_shop() -> Result<Vec<Category>, String> {
 
 fn load_config() -> Result<ShopConfig, String> {
     let dir = ensure_default_files()?;
-    let bytes = fs::read(dir.join("config.json")).map_err(|error| format!("não foi possível ler config.json: {error}"))?;
-    let config: ShopConfig = serde_json::from_slice(&bytes).map_err(|error| format!("config.json inválido: {error}"))?;
+    let bytes = fs::read(dir.join("config.json"))
+        .map_err(|error| format!("não foi possível ler config.json: {error}"))?;
+    let config: ShopConfig =
+        serde_json::from_slice(&bytes).map_err(|error| format!("config.json inválido: {error}"))?;
     for currency in [&config.currency.normal, &config.currency.vip] {
-        if currency.is_empty() || currency.len() > 128 || !currency.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_:.-".contains(&byte)) {
+        if currency.is_empty()
+            || currency.len() > 128
+            || !currency.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_:.-".contains(&byte)
+            })
+        {
             return Err("config.json contém um identificador de moeda inválido".into());
         }
     }
@@ -159,10 +204,16 @@ fn load_config() -> Result<ShopConfig, String> {
 }
 
 fn ensure_loaded(state: &mut State) {
-    if state.loaded { return; }
-    let loaded = load_shop().and_then(|categories| load_config().map(|config| (categories, config)));
+    if state.loaded {
+        return;
+    }
+    let loaded =
+        load_shop().and_then(|categories| load_config().map(|config| (categories, config)));
     match loaded {
-        Ok((categories, config)) => { state.categories = categories; state.config = config; }
+        Ok((categories, config)) => {
+            state.categories = categories;
+            state.config = config;
+        }
         Err(error) => {
             eprintln!("[AuraEssentialsHorizon] {error}; usando a lista interna inicial");
             state.categories = categories_from_json(DEFAULT_ITEMS_JSON).unwrap_or_default();
@@ -172,13 +223,17 @@ fn ensure_loaded(state: &mut State) {
 }
 
 fn categories_from_json(json: &str) -> Result<Vec<Category>, String> {
-    let data: HashMap<String, Vec<ShopItem>> = serde_json::from_str(json).map_err(|error| error.to_string())?;
-    Ok(category_meta().into_iter().map(|(id, title, icon)| Category {
-        id,
-        title,
-        icon,
-        items: data.get(id).cloned().unwrap_or_default(),
-    }).collect())
+    let data: HashMap<String, Vec<ShopItem>> =
+        serde_json::from_str(json).map_err(|error| error.to_string())?;
+    Ok(category_meta()
+        .into_iter()
+        .map(|(id, title, icon)| Category {
+            id,
+            title,
+            icon,
+            items: data.get(id).cloned().unwrap_or_default(),
+        })
+        .collect())
 }
 
 fn category_meta() -> [(&'static str, &'static str, &'static str); 8] {
@@ -253,10 +308,17 @@ fn show_menu(
             "data": {"title": title, "rows": rows, "items": menu_items},
         }),
     )?;
-    result.get("window_id")?.as_i64().and_then(|id| i32::try_from(id).ok())
+    result
+        .get("window_id")?
+        .as_i64()
+        .and_then(|id| i32::try_from(id).ok())
 }
 
-fn call_json(host: &HostApiV3, player: u128, request: serde_json::Value) -> Option<serde_json::Value> {
+fn call_json(
+    host: &HostApiV3,
+    player: u128,
+    request: serde_json::Value,
+) -> Option<serde_json::Value> {
     let callback = host.call_json?;
     let input = request.to_string();
     let (high, low) = ((player >> 64) as u64, player as u64);
@@ -704,18 +766,26 @@ unsafe extern "C-unwind" fn register_commands(_: *mut c_void, host: *const HostA
         return;
     }
     let host = unsafe { &*host };
-    let _ = call_json(host, 0, serde_json::json!({
-        "operation": operation::COMMAND_REGISTER,
-        "data": {"usage": "loja", "default_level": 0},
-    }));
-    let _ = call_json(host, 0, serde_json::json!({
-        "operation": operation::COMMAND_REGISTER,
-        "data": {
-            "usage": "loja recarregar",
-            "default_level": 2,
-            "permission": "auraessentials.loja.admin",
-        },
-    }));
+    let _ = call_json(
+        host,
+        0,
+        serde_json::json!({
+            "operation": operation::COMMAND_REGISTER,
+            "data": {"usage": "loja", "default_level": 0},
+        }),
+    );
+    let _ = call_json(
+        host,
+        0,
+        serde_json::json!({
+            "operation": operation::COMMAND_REGISTER,
+            "data": {
+                "usage": "loja recarregar",
+                "default_level": 2,
+                "permission": "auraessentials.loja.admin",
+            },
+        }),
+    );
 }
 
 unsafe extern "C-unwind" fn command(
@@ -730,7 +800,9 @@ unsafe extern "C-unwind" fn command(
         return 0;
     }
     let line = unsafe { std::slice::from_raw_parts(line, len) };
-    let Ok(line) = std::str::from_utf8(line) else { return 0 };
+    let Ok(line) = std::str::from_utf8(line) else {
+        return 0;
+    };
     let line = line.trim().trim_start_matches('/');
     if !matches!(line, "loja" | "loja recarregar") {
         return 0;
@@ -749,7 +821,11 @@ unsafe extern "C-unwind" fn command(
                 message(host, player, "Configuração e itens da loja recarregados.");
             }
             (Err(error), _) | (_, Err(error)) => {
-                message(host, player, &format!("Não foi possível recarregar a loja: {error}"));
+                message(
+                    host,
+                    player,
+                    &format!("Não foi possível recarregar a loja: {error}"),
+                );
             }
         }
     } else {

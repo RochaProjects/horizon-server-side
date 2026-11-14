@@ -159,8 +159,8 @@ impl BalanceStore {
         if !path.exists() {
             let legacy = plugins_dir.join("balances.json");
             if legacy.exists() {
-                if let Err(error) = fs::create_dir_all(&plugin_dir)
-                    .and_then(|()| fs::rename(&legacy, &path))
+                if let Err(error) =
+                    fs::create_dir_all(&plugin_dir).and_then(|()| fs::rename(&legacy, &path))
                 {
                     self.available = false;
                     log::error!(

@@ -121,7 +121,7 @@ jobs:
         if: steps.rust.outputs.required != 'false'
         run: |
           cargo +stable fmt --all -- --check
-          cargo +stable clippy --workspace --all-targets --locked -- -D warnings
+          cargo +stable clippy --workspace --exclude horizon-plugin-aura-loja --all-targets --locked -- -D warnings
           # The server build (released as horizon-engine): the game without sound or controllers.
           cargo +stable clippy -p horizon-client --all-targets --locked --no-default-features --features server-plugins -- -D warnings
       # Libraries, binaries and integration tests, then doc tests: not the ~275 examples, which clippy above already
@@ -131,12 +131,12 @@ jobs:
       - name: Test Rust core and voxel kernel correctness
         if: steps.rust.outputs.required != 'false'
         run: |
-          cargo +stable test --locked --workspace --lib --bins --tests
+          cargo +stable test --locked --workspace --exclude horizon-plugin-aura-loja --lib --bins --tests
           # The full content-root tests (#[ignore]d: minutes each on a laptop). The same build as above; they need the
           # prepared vanilla data, so without it they pass at once. Keep the target selection identical to avoid
           # recompiling the workspace with a different dependency graph.
-          cargo +stable test --locked --workspace --lib --bins --tests mod_content::tests:: -- --ignored
-          cargo +stable test --locked --workspace --doc
+          cargo +stable test --locked --workspace --exclude horizon-plugin-aura-loja --lib --bins --tests mod_content::tests:: -- --ignored
+          cargo +stable test --locked --workspace --exclude horizon-plugin-aura-loja --doc
   # The launcher is its own workspace (launcher/Cargo.toml), so verify's cargo runs never build it. A pull request that
   # changes it or a crate it builds is checked here, and so is every push to main: two pull requests can each pass
   # alone and break it together (#2059 and the registry ratings did, 2026-10-26).

@@ -193,16 +193,18 @@ pub struct HostApiV3 {
     /// Request and response are UTF-8 JSON. `response_len` is always written
     /// when non-null; if the response does not fit, it receives the required
     /// size and the function returns `result::BUFFER_TOO_SMALL`.
-    pub call_json: Option<unsafe extern "C-unwind" fn(
-        *mut c_void,
-        u64,
-        u64,
-        ByteSlice,
-        usize,
-        *mut u8,
-        usize,
-        *mut usize,
-    ) -> i32>,
+    pub call_json: Option<
+        unsafe extern "C-unwind" fn(
+            *mut c_void,
+            u64,
+            u64,
+            ByteSlice,
+            usize,
+            *mut u8,
+            usize,
+            *mut usize,
+        ) -> i32,
+    >,
 }
 
 /// ABI v3 event and command callbacks receive JSON values, leaving event
@@ -217,43 +219,28 @@ pub struct PluginV3 {
     pub register_commands: Option<unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV3)>,
     /// `command` is the raw UTF-8 command line without its leading slash.
     /// Return nonzero when handled.
-    pub command: Option<unsafe extern "C-unwind" fn(
-        *mut c_void,
-        *const HostApiV3,
-        u64,
-        u64,
-        ByteSlice,
-        usize,
-    ) -> u8>,
-    pub menu_click: Option<unsafe extern "C-unwind" fn(
-        *mut c_void,
-        *const HostApiV3,
-        u64,
-        u64,
-        i32,
-        i32,
-        i32,
-        i32,
-    )>,
+    pub command: Option<
+        unsafe extern "C-unwind" fn(
+            *mut c_void,
+            *const HostApiV3,
+            u64,
+            u64,
+            ByteSlice,
+            usize,
+        ) -> u8,
+    >,
+    pub menu_click: Option<
+        unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV3, u64, u64, i32, i32, i32, i32),
+    >,
     /// The event payload is a JSON object. Return nonzero to cancel a
     /// cancellable event.
-    pub event: Option<unsafe extern "C-unwind" fn(
-        *mut c_void,
-        *const HostApiV3,
-        u32,
-        ByteSlice,
-        usize,
-    ) -> u8>,
+    pub event: Option<
+        unsafe extern "C-unwind" fn(*mut c_void, *const HostApiV3, u32, ByteSlice, usize) -> u8,
+    >,
     /// Return -1 to deny, 0 to defer to the operator-level default, or 1 to
     /// grant the permission node.
-    pub permission: Option<unsafe extern "C-unwind" fn(
-        *mut c_void,
-        u64,
-        u64,
-        ByteSlice,
-        usize,
-        u8,
-    ) -> i8>,
+    pub permission:
+        Option<unsafe extern "C-unwind" fn(*mut c_void, u64, u64, ByteSlice, usize, u8) -> i8>,
 }
 
 unsafe impl Sync for PluginV3 {}

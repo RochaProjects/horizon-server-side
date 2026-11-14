@@ -10,9 +10,9 @@ use horizon_client::{
     items::ItemStack, lan::data::component_nbt, mod_api::GameRuleValue, text::Text,
 };
 #[cfg(feature = "server-plugins")]
-use horizon_world::nbt::{Compound, Tag};
-#[cfg(feature = "server-plugins")]
 use horizon_server_plugin_loader::{Event, Host, ItemDelta, MenuItem, TransactionError};
+#[cfg(feature = "server-plugins")]
+use horizon_world::nbt::{Compound, Tag};
 
 #[cfg(feature = "server-plugins")]
 struct GameHost<'g, 'a, 'c> {
@@ -92,12 +92,8 @@ impl Host for GameHost<'_, '_, '_> {
             }
             stacks[item.slot] = Some(stack);
         }
-        self.game.native_open_menu(
-            player,
-            rows,
-            Text::literal(title).resolve_legacy(),
-            stacks,
-        )
+        self.game
+            .native_open_menu(player, rows, Text::literal(title).resolve_legacy(), stacks)
     }
 
     fn transact_items(
@@ -115,11 +111,7 @@ impl Host for GameHost<'_, '_, '_> {
             .map_err(|()| TransactionError)
     }
 
-    fn call_json(
-        &mut self,
-        player: u128,
-        request: serde_json::Value,
-    ) -> serde_json::Value {
+    fn call_json(&mut self, player: u128, request: serde_json::Value) -> serde_json::Value {
         use horizon_server_plugin_api::operation as op;
 
         let Some(operation) = request.get("operation").and_then(|v| v.as_str()) else {
@@ -233,9 +225,11 @@ impl Host for GameHost<'_, '_, '_> {
                         for (component, value) in components {
                             if component.len() > 128
                                 || !component.contains(':')
-                                || !component
-                                    .bytes()
-                                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_:/.-".contains(&byte))
+                                || !component.bytes().all(|byte| {
+                                    byte.is_ascii_lowercase()
+                                        || byte.is_ascii_digit()
+                                        || b"_:/.-".contains(&byte)
+                                })
                             {
                                 continue;
                             }
@@ -271,10 +265,23 @@ impl Host for GameHost<'_, '_, '_> {
                     let Some(url) = pack.get("url").and_then(|value| value.as_str()) else {
                         return serde_json::json!({"ok": false, "sent": sent, "error": "invalid_url"});
                     };
-                    let sha1 = pack.get("sha1").and_then(|value| value.as_str()).unwrap_or("");
+                    let sha1 = pack
+                        .get("sha1")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
                     let prompt = pack.get("prompt").map(horizon_client::packs::component);
-                    let required = pack.get("required").and_then(|value| value.as_bool()).unwrap_or(false);
-                    if !self.game.native_send_resource_pack(player, id, url, sha1, prompt.as_ref(), required) {
+                    let required = pack
+                        .get("required")
+                        .and_then(|value| value.as_bool())
+                        .unwrap_or(false);
+                    if !self.game.native_send_resource_pack(
+                        player,
+                        id,
+                        url,
+                        sha1,
+                        prompt.as_ref(),
+                        required,
+                    ) {
                         return serde_json::json!({"ok": false, "sent": sent, "error": "pack_send_failed"});
                     }
                     sent += 1;
@@ -469,13 +476,16 @@ impl Host for GameHost<'_, '_, '_> {
                     } else {
                         horizon_client::packs::component(left)
                     };
-                    let right = line.get("right").filter(|value| !value.is_null()).map(|value| {
-                        if let Some(text) = value.as_str() {
-                            Text::literal(text).resolve_legacy()
-                        } else {
-                            horizon_client::packs::component(value)
-                        }
-                    });
+                    let right = line
+                        .get("right")
+                        .filter(|value| !value.is_null())
+                        .map(|value| {
+                            if let Some(text) = value.as_str() {
+                                Text::literal(text).resolve_legacy()
+                            } else {
+                                horizon_client::packs::component(value)
+                            }
+                        });
                     sidebar.lines.push((left, right));
                 }
                 serde_json::json!({"ok": self.game.native_sidebar(player, Some(&sidebar))})
@@ -498,23 +508,53 @@ impl Host for GameHost<'_, '_, '_> {
                 } else {
                     text.clone()
                 };
-                let line_width = data.get("line_width").and_then(|value| value.as_u64()).unwrap_or(200).clamp(1, 2000) as i32;
-                let background = data.get("background").and_then(|value| value.as_u64()).unwrap_or(0x4000_0000).min(u64::from(u32::MAX)) as u32;
+                let line_width = data
+                    .get("line_width")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(200)
+                    .clamp(1, 2000) as i32;
+                let background = data
+                    .get("background")
+                    .and_then(|value| value.as_u64())
+                    .unwrap_or(0x4000_0000)
+                    .min(u64::from(u32::MAX)) as u32;
                 let mut nbt = Compound::new();
                 nbt.insert("text".into(), component_nbt(&component));
                 nbt.insert("line_width".into(), Tag::Int(line_width));
                 nbt.insert("background".into(), Tag::Int(background as i32));
                 nbt.insert("text_opacity".into(), Tag::Byte(-1));
-                nbt.insert("shadow".into(), Tag::Byte(i8::from(data.get("shadow").and_then(|value| value.as_bool()).unwrap_or(false))));
-                nbt.insert("see_through".into(), Tag::Byte(i8::from(data.get("see_through").and_then(|value| value.as_bool()).unwrap_or(false))));
-                let alignment = match data.get("alignment").and_then(|value| value.as_str()).unwrap_or("center") {
+                nbt.insert(
+                    "shadow".into(),
+                    Tag::Byte(i8::from(
+                        data.get("shadow")
+                            .and_then(|value| value.as_bool())
+                            .unwrap_or(false),
+                    )),
+                );
+                nbt.insert(
+                    "see_through".into(),
+                    Tag::Byte(i8::from(
+                        data.get("see_through")
+                            .and_then(|value| value.as_bool())
+                            .unwrap_or(false),
+                    )),
+                );
+                let alignment = match data
+                    .get("alignment")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("center")
+                {
                     "left" => 0,
                     "center" => 1,
                     "right" => 2,
                     _ => return fail("invalid_alignment"),
                 };
                 nbt.insert("alignment".into(), Tag::Byte(alignment));
-                let billboard = match data.get("billboard").and_then(|value| value.as_str()).unwrap_or("center") {
+                let billboard = match data
+                    .get("billboard")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("center")
+                {
                     "fixed" => 0,
                     "vertical" => 1,
                     "horizontal" => 2,
@@ -522,7 +562,10 @@ impl Host for GameHost<'_, '_, '_> {
                     _ => return fail("invalid_billboard"),
                 };
                 nbt.insert("billboard".into(), Tag::Byte(billboard));
-                match self.game.native_summon(dimension, "minecraft:text_display", position, nbt) {
+                match self
+                    .game
+                    .native_summon(dimension, "minecraft:text_display", position, nbt)
+                {
                     Some(entity_id) => serde_json::json!({"ok": true, "entity_id": entity_id}),
                     None => fail("entity_spawn_failed"),
                 }
@@ -531,28 +574,43 @@ impl Host for GameHost<'_, '_, '_> {
                 let Some(dimension) = data.get("dimension").and_then(|value| value.as_str()) else {
                     return fail("invalid_dimension");
                 };
-                let Some(entity_id) = data.get("entity_id").and_then(|value| value.as_u64()).and_then(|id| u32::try_from(id).ok()) else {
+                let Some(entity_id) = data
+                    .get("entity_id")
+                    .and_then(|value| value.as_u64())
+                    .and_then(|id| u32::try_from(id).ok())
+                else {
                     return fail("invalid_entity_id");
                 };
                 let Some(position) = json_position(data.get("position")) else {
                     return fail("invalid_position");
                 };
-                let yaw = data.get("yaw").and_then(|value| value.as_f64()).unwrap_or(0.0) as f32;
-                let pitch = data.get("pitch").and_then(|value| value.as_f64()).unwrap_or(0.0) as f32;
+                let yaw = data
+                    .get("yaw")
+                    .and_then(|value| value.as_f64())
+                    .unwrap_or(0.0) as f32;
+                let pitch = data
+                    .get("pitch")
+                    .and_then(|value| value.as_f64())
+                    .unwrap_or(0.0) as f32;
                 serde_json::json!({"ok": self.game.native_move_entity(dimension, entity_id, position, yaw, pitch)})
             }
             op::ENTITY_REMOVE => {
                 let Some(dimension) = data.get("dimension").and_then(|value| value.as_str()) else {
                     return fail("invalid_dimension");
                 };
-                let Some(entity_id) = data.get("entity_id").and_then(|value| value.as_u64()).and_then(|id| u32::try_from(id).ok()) else {
+                let Some(entity_id) = data
+                    .get("entity_id")
+                    .and_then(|value| value.as_u64())
+                    .and_then(|id| u32::try_from(id).ok())
+                else {
                     return fail("invalid_entity_id");
                 };
                 serde_json::json!({"ok": self.game.native_remove_entity(dimension, entity_id)})
             }
-            op::PLUGIN_STORAGE_GET | op::PLUGIN_STORAGE_SET | op::PLUGIN_STORAGE_DELETE | op::PLUGIN_STORAGE_LIST => {
-                plugin_storage(operation, &data)
-            }
+            op::PLUGIN_STORAGE_GET
+            | op::PLUGIN_STORAGE_SET
+            | op::PLUGIN_STORAGE_DELETE
+            | op::PLUGIN_STORAGE_LIST => plugin_storage(operation, &data),
             _ => fail("unsupported_operation"),
         }
     }
@@ -608,20 +666,31 @@ fn plugin_storage(operation: &str, data: &serde_json::Value) -> serde_json::Valu
         }
     }
     let mut values = match fs::read(&path) {
-        Ok(bytes) if bytes.len() <= 4 * 1024 * 1024 => match serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(&bytes) {
-            Ok(values) => values,
-            Err(_) => return serde_json::json!({"ok": false, "error": "storage_corrupt"}),
-        },
+        Ok(bytes) if bytes.len() <= 4 * 1024 * 1024 => {
+            match serde_json::from_slice::<serde_json::Map<String, serde_json::Value>>(&bytes) {
+                Ok(values) => values,
+                Err(_) => return serde_json::json!({"ok": false, "error": "storage_corrupt"}),
+            }
+        }
         Ok(_) => return serde_json::json!({"ok": false, "error": "storage_too_large"}),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => serde_json::Map::new(),
         Err(_) => return serde_json::json!({"ok": false, "error": "storage_unavailable"}),
     };
     match operation {
-        op::PLUGIN_STORAGE_GET => serde_json::json!({"ok": true, "value": values.get(key.expect("validated key"))}),
+        op::PLUGIN_STORAGE_GET => {
+            serde_json::json!({"ok": true, "value": values.get(key.expect("validated key"))})
+        }
         op::PLUGIN_STORAGE_LIST => {
             let prefix = key.unwrap_or("");
-            let after = data.get("after").and_then(|value| value.as_str()).unwrap_or("");
-            let limit = data.get("limit").and_then(|value| value.as_u64()).unwrap_or(128).clamp(1, 256) as usize;
+            let after = data
+                .get("after")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let limit = data
+                .get("limit")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(128)
+                .clamp(1, 256) as usize;
             let mut keys: Vec<_> = values
                 .keys()
                 .filter(|candidate| candidate.starts_with(prefix) && candidate.as_str() > after)
@@ -661,12 +730,23 @@ fn plugin_storage(operation: &str, data: &serde_json::Value) -> serde_json::Valu
 }
 
 #[cfg(feature = "server-plugins")]
-fn write_plugin_storage(path: &std::path::Path, values: &serde_json::Map<String, serde_json::Value>) -> bool {
+fn write_plugin_storage(
+    path: &std::path::Path,
+    values: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
     use std::{fs, io::Write};
-    let Ok(bytes) = serde_json::to_vec(values) else { return false };
-    if bytes.len() > 4 * 1024 * 1024 { return false; }
-    let Some(parent) = path.parent() else { return false };
-    if fs::create_dir_all(parent).is_err() { return false; }
+    let Ok(bytes) = serde_json::to_vec(values) else {
+        return false;
+    };
+    if bytes.len() > 4 * 1024 * 1024 {
+        return false;
+    }
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return false;
+    }
     let temp = path.with_extension("json.tmp");
     let result = (|| {
         let mut file = fs::File::create(&temp)?;
@@ -674,7 +754,10 @@ fn write_plugin_storage(path: &std::path::Path, values: &serde_json::Map<String,
         file.sync_all()?;
         fs::rename(&temp, path)
     })();
-    if result.is_err() { let _ = fs::remove_file(temp); return false; }
+    if result.is_err() {
+        let _ = fs::remove_file(temp);
+        return false;
+    }
     true
 }
 
