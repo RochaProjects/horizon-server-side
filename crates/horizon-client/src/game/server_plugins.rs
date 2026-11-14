@@ -77,7 +77,7 @@ impl Host for GameHost<'_, '_, '_> {
                 // Parse legacy codes as Minecraft's component serializer does:
                 // a color code also explicitly clears italic/bold decorations.
                 // This matters because custom item names inherit italic in tooltips.
-                let name = Text::literal(&format!("§r{color}{}", item.name)).resolve_legacy();
+                let name = Text::literal(format!("§r{color}{}", item.name)).resolve_legacy();
                 stack.data_mut().custom_name = Some(component_nbt(&name.component()));
             }
             if !item.lore.is_empty() {
@@ -815,9 +815,7 @@ pub(super) fn permission_value(
     node: &str,
     default_level: u8,
 ) -> Option<bool> {
-    if game.options.dedicated.is_none() {
-        return None;
-    }
+    game.options.dedicated.as_ref()?;
     let root = root()?;
     horizon_server_plugin_loader::permission_value(&root, player, node, default_level)
 }

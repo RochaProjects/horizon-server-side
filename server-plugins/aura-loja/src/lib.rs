@@ -276,8 +276,26 @@ fn spec(slot: usize, item: &str, name: &str, color: &str, count: u32) -> ItemSpe
 }
 
 fn spec_lore(mut item: ItemSpec, lore: Vec<String>) -> ItemSpec {
-    item.lore = lore;
+    item.lore = lore.into_iter().map(legacy_colors).collect();
     item
+}
+
+/// Accept the `&` color notation commonly used in editable shop JSON, alongside vanilla's `§`.
+fn legacy_colors(text: String) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '&'
+            && let Some(code) = chars.clone().next()
+            && "0123456789abcdefklmnor".contains(code.to_ascii_lowercase())
+        {
+            output.push('§');
+            output.push(chars.next().expect("peeked character"));
+        } else {
+            output.push(ch);
+        }
+    }
+    output
 }
 
 fn show_menu(
@@ -858,6 +876,10 @@ unsafe extern "C-unwind" fn menu_click(
         View::Categories(mapping) => {
             if let Some(category) = mapping.get(&slot).copied() {
                 open_items(&mut state, host, player, category, 0);
+            } else {
+                state
+                    .views
+                    .insert((player, window), View::Categories(mapping));
             }
         }
         View::Items {
@@ -869,20 +891,43 @@ unsafe extern "C-unwind" fn menu_click(
             let nav = usize::from(rows) * 9 - 9;
             if slot == (nav + 4) as i32 {
                 open_categories(&mut state, host, player);
-            } else if slot == (nav + 3) as i32 && page > 0 {
-                open_items(&mut state, host, player, category, page - 1);
+            } else if slot == (nav + 3) as i32 {
+                if page > 0 {
+                    open_items(&mut state, host, player, category, page - 1);
+                } else {
+                    state.views.insert(
+                        (player, window),
+                        View::Items {
+                            category,
+                            page,
+                            rows,
+                            slots,
+                        },
+                    );
+                }
             } else if slot == (nav + 5) as i32 {
                 open_items(&mut state, host, player, category, page + 1);
             } else if let Some(item) = slots.get(&slot).copied() {
                 if state.categories[category].id == "loja_vip" {
-                    let product = state.categories[category].items[item].clone();
-                    let currency = state.config.currency.vip.clone();
-                    let result = transact_shop_item(host, player, &product, &currency, 1, true);
-                    trade_message(host, player, result, true);
+                    message(
+                        host,
+                        player,
+                        "A compra VIP ainda não está disponível nesta loja.",
+                    );
                     open_items(&mut state, host, player, category, page);
                 } else {
                     open_detail(&mut state, host, player, category, page, item, 1);
                 }
+            } else {
+                state.views.insert(
+                    (player, window),
+                    View::Items {
+                        category,
+                        page,
+                        rows,
+                        slots,
+                    },
+                );
             }
         }
         View::Detail {
@@ -905,6 +950,15 @@ unsafe extern "C-unwind" fn menu_click(
                 open_detail(&mut state, host, player, category, page, item, next);
             }
             20 => {
+                if state.categories[category].id == "loja_vip" {
+                    message(
+                        host,
+                        player,
+                        "A compra VIP ainda não está disponível nesta loja.",
+                    );
+                    open_items(&mut state, host, player, category, page);
+                    return;
+                }
                 let product = state.categories[category].items[item].clone();
                 let currency = if state.categories[category].id == "loja_vip" {
                     state.config.currency.vip.clone()
@@ -924,6 +978,11 @@ unsafe extern "C-unwind" fn menu_click(
                 );
             }
             24 => {
+                if state.categories[category].id == "loja_vip" {
+                    message(host, player, "A venda de itens VIP está desativada.");
+                    open_items(&mut state, host, player, category, page);
+                    return;
+                }
                 let product = state.categories[category].items[item].clone();
                 let currency = if state.categories[category].id == "loja_vip" {
                     state.config.currency.vip.clone()
