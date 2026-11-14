@@ -1,8 +1,8 @@
 //! Runtime plugin loader. Unsafe ABI handling is isolated in this crate.
 
 use horizon_server_plugin_api::{
-    ABI_VERSION, ByteSlice, HostApiV2, ItemDeltaV2, MenuItemV2, PluginEntryV2, PluginV2,
-    ServerEventV2,
+    ABI_VERSION, ABI_VERSION_V3, ByteSlice, HostApiV2, HostApiV3, ItemDeltaV2, MenuItemV2,
+    PluginEntryV2, PluginEntryV3, PluginV2, PluginV3, ServerEventV2,
 };
 use libloading::Library;
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,7 @@ pub struct Event {
     pub window_id: i32,
     pub position: [i32; 3],
     pub data_id: u32,
+    pub payload: serde_json::Value,
 }
 
 pub trait Host {
@@ -64,6 +65,8 @@ pub trait Host {
         items: &[ItemDelta],
         finish: &mut dyn FnMut(bool) -> bool,
     ) -> Result<(), TransactionError>;
+    /// Dispatches an extensible JSON request. The response is also a JSON value.
+    fn call_json(&mut self, player: u128, request: serde_json::Value) -> serde_json::Value;
 }
 
 struct HostBridge<'a> {
@@ -72,10 +75,33 @@ struct HostBridge<'a> {
 }
 
 struct LoadedPlugin {
-    descriptor: &'static PluginV2,
+    descriptor: PluginDescriptor,
     state: *mut c_void,
     disabled: bool,
     _library: Library,
+}
+
+#[derive(Clone, Copy)]
+enum PluginDescriptor {
+    V2(&'static PluginV2),
+    V3(&'static PluginV3),
+}
+
+impl PluginDescriptor {
+    fn name(self) -> String {
+        let (name, len) = match self {
+            Self::V2(plugin) => (plugin.name, plugin.name_len),
+            Self::V3(plugin) => (plugin.name, plugin.name_len),
+        };
+        if name.is_null() || len > 128 {
+            return "<nome inválido>".into();
+        }
+        // SAFETY: the descriptor and its static name live in the loaded library.
+        let bytes = unsafe { std::slice::from_raw_parts(name, len) };
+        std::str::from_utf8(bytes)
+            .unwrap_or("<nome inválido>")
+            .to_owned()
+    }
 }
 
 // Calls are serialized on the server thread while this global lock is held.
@@ -83,7 +109,11 @@ unsafe impl Send for LoadedPlugin {}
 
 impl Drop for LoadedPlugin {
     fn drop(&mut self) {
-        if let Some(destroy) = self.descriptor.destroy {
+        let destroy = match self.descriptor {
+            PluginDescriptor::V2(plugin) => plugin.destroy,
+            PluginDescriptor::V3(plugin) => plugin.destroy,
+        };
+        if let Some(destroy) = destroy {
             // SAFETY: the v2 ABI permits unwinding and state belongs to this library.
             let _ = catch_unwind(AssertUnwindSafe(|| unsafe { destroy(self.state) }));
         }
@@ -122,9 +152,26 @@ impl BalanceStore {
         if self.path.is_some() {
             return;
         }
-        let path = plugins_dir.join("balances.json");
+        let plugin_dir = plugins_dir.join("AuraEssentialsHorizon");
+        let path = plugin_dir.join("balances.json");
         self.path = Some(path.clone());
         self.available = true;
+        if !path.exists() {
+            let legacy = plugins_dir.join("balances.json");
+            if legacy.exists() {
+                if let Err(error) = fs::create_dir_all(&plugin_dir)
+                    .and_then(|()| fs::rename(&legacy, &path))
+                {
+                    self.available = false;
+                    log::error!(
+                        "Não foi possível migrar {} para {}: {error}",
+                        legacy.display(),
+                        path.display()
+                    );
+                    return;
+                }
+            }
+        }
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
@@ -418,9 +465,9 @@ unsafe extern "C-unwind" fn transact(
     item_count: usize,
 ) -> i32 {
     if context.is_null()
-        || currency.is_null()
-        || currency_len == 0
+        || (currency_len > 0 && currency.is_null())
         || currency_len > 128
+        || (currency_len == 0 && balance_delta != 0)
         || item_count > 16
         || (item_count > 0 && raw_items.is_null())
     {
@@ -428,13 +475,15 @@ unsafe extern "C-unwind" fn transact(
     }
     // SAFETY: callback context and all input pointers are valid for this synchronous ABI call.
     let bridge = unsafe { &mut *(context.cast::<HostBridge<'_>>()) };
-    let currency_bytes = unsafe { std::slice::from_raw_parts(currency, currency_len) };
-    let Ok(currency) = std::str::from_utf8(currency_bytes) else {
-        return 5;
+    let currency = if currency_len == 0 {
+        ""
+    } else {
+        let currency_bytes = unsafe { std::slice::from_raw_parts(currency, currency_len) };
+        let Ok(currency) = std::str::from_utf8(currency_bytes) else {
+            return 5;
+        };
+        currency
     };
-    if !valid_currency(currency) || !bridge.balances.available {
-        return if bridge.balances.available { 5 } else { 4 };
-    }
     let raw_items = if item_count == 0 {
         &[][..]
     } else {
@@ -465,6 +514,15 @@ unsafe extern "C-unwind" fn transact(
         items.push(ItemDelta { item, delta });
     }
     let player = (u128::from(high) << 64) | u128::from(low);
+    if currency.is_empty() {
+        return match bridge.host.transact_items(player, &items, &mut |_| true) {
+            Ok(()) => 1,
+            Err(_) => 3,
+        };
+    }
+    if !valid_currency(currency) || !bridge.balances.available {
+        return if bridge.balances.available { 5 } else { 4 };
+    }
     let Some(old_balance) = bridge.balances.balance(currency, player) else {
         return 4;
     };
@@ -540,6 +598,73 @@ fn bind_api(api: &mut HostApiV2, bridge: &mut HostBridge<'_>) {
     api.context = (bridge as *mut HostBridge<'_>).cast();
 }
 
+unsafe extern "C-unwind" fn call_json(
+    context: *mut c_void,
+    high: u64,
+    low: u64,
+    request: ByteSlice,
+    request_len: usize,
+    response: *mut u8,
+    response_capacity: usize,
+    response_len: *mut usize,
+) -> i32 {
+    if context.is_null()
+        || request.is_null()
+        || request_len == 0
+        || request_len > 65_536
+        || response_len.is_null()
+        || (response_capacity > 0 && response.is_null())
+        || response_capacity > 65_536
+    {
+        return 5;
+    }
+    // SAFETY: input and output buffers are valid for the synchronous call.
+    let bridge = unsafe { &mut *(context.cast::<HostBridge<'_>>()) };
+    let request_bytes = unsafe { std::slice::from_raw_parts(request, request_len) };
+    let Ok(request_text) = std::str::from_utf8(request_bytes) else {
+        return 5;
+    };
+    let Ok(request_value) = serde_json::from_str(request_text) else {
+        return 5;
+    };
+    let player = (u128::from(high) << 64) | u128::from(low);
+    let output = bridge.host.call_json(player, request_value).to_string();
+    // SAFETY: response_len is checked non-null above; response is only written
+    // when its caller-provided capacity can hold the full response.
+    unsafe { *response_len = output.len() };
+    if output.len() > response_capacity {
+        return 6;
+    }
+    if !output.is_empty() {
+        unsafe {
+            std::ptr::copy_nonoverlapping(output.as_ptr(), response, output.len());
+        }
+    }
+    1
+}
+
+fn host_api_v3<'a>(
+    host: &'a mut dyn Host,
+    balances: &'a mut BalanceStore,
+) -> (HostApiV3, HostBridge<'a>) {
+    let (common, bridge) = host_api(host, balances);
+    (
+        HostApiV3 {
+            abi_version: ABI_VERSION_V3,
+            context: std::ptr::null_mut(),
+            common,
+            call_json: Some(call_json),
+        },
+        bridge,
+    )
+}
+
+fn bind_api_v3(api: &mut HostApiV3, bridge: &mut HostBridge<'_>) {
+    let context = (bridge as *mut HostBridge<'_>).cast();
+    api.context = context;
+    api.common.context = context;
+}
+
 fn load_once(root: &Path) -> &'static Mutex<Loader> {
     let lock = loader();
     let mut state = lock.lock().unwrap_or_else(|e| e.into_inner());
@@ -596,57 +721,87 @@ fn is_library(path: &Path) -> bool {
 unsafe fn load_plugin(path: &Path) -> Result<LoadedPlugin, String> {
     // SAFETY: the library remains resident for the complete plugin lifetime.
     let library = unsafe { Library::new(path) }.map_err(|e| e.to_string())?;
-    let entry = unsafe { library.get::<PluginEntryV2>(b"horizon_server_plugin_v2\0") }
-        .map_err(|e| e.to_string())?;
-    let entry = *entry;
-    let ptr = catch_unwind(AssertUnwindSafe(|| unsafe { entry() }))
-        .map_err(|_| "panic na função de entrada do plugin".to_owned())?;
-    if ptr.is_null() {
-        return Err("plugin retornou descritor nulo".into());
-    }
-    let descriptor = unsafe { &*ptr };
-    if descriptor.abi_version != ABI_VERSION {
-        return Err(format!(
-            "ABI {} incompatível; servidor usa ABI {ABI_VERSION}",
-            descriptor.abi_version
-        ));
-    }
-    if descriptor.name.is_null()
-        || descriptor.name_len == 0
-        || descriptor.name_len > 128
-        || descriptor.create.is_none()
-        || descriptor.destroy.is_none()
-        || descriptor.register_commands.is_none()
-        || descriptor.command.is_none()
-        || descriptor.menu_click.is_none()
-    {
-        return Err("descritor incompleto".into());
-    }
-    let state = catch_unwind(AssertUnwindSafe(|| unsafe {
-        descriptor.create.expect("validado")()
-    }))
-    .map_err(|_| "panic ao iniciar o plugin".to_owned())?;
-    if state.is_null() {
-        return Err("plugin não conseguiu iniciar".into());
-    }
-    let descriptor = unsafe { &*ptr };
+    let entry_v3 = unsafe { library.get::<PluginEntryV3>(b"horizon_server_plugin_v3\0") }
+        .ok()
+        .map(|entry| *entry);
+    let descriptor = if let Some(entry) = entry_v3 {
+        let ptr = catch_unwind(AssertUnwindSafe(|| unsafe { entry() }))
+            .map_err(|_| "panic na função de entrada do plugin".to_owned())?;
+        if ptr.is_null() {
+            return Err("plugin retornou descritor nulo".into());
+        }
+        let plugin = unsafe { &*ptr };
+        if plugin.abi_version != ABI_VERSION_V3 {
+            return Err(format!(
+                "ABI {} incompatível; servidor usa ABI {ABI_VERSION_V3}",
+                plugin.abi_version
+            ));
+        }
+        if plugin.name.is_null()
+            || plugin.name_len == 0
+            || plugin.name_len > 128
+            || plugin.create.is_none()
+            || plugin.destroy.is_none()
+            || plugin.register_commands.is_none()
+            || plugin.command.is_none()
+            || plugin.menu_click.is_none()
+        {
+            return Err("descritor ABI v3 incompleto".into());
+        }
+        let state = catch_unwind(AssertUnwindSafe(|| unsafe {
+            plugin.create.expect("validado")()
+        }))
+        .map_err(|_| "panic ao iniciar o plugin".to_owned())?;
+        if state.is_null() {
+            return Err("plugin não conseguiu iniciar".into());
+        }
+        (PluginDescriptor::V3(plugin), state)
+    } else {
+        let entry = unsafe { library.get::<PluginEntryV2>(b"horizon_server_plugin_v2\0") }
+            .map_err(|e| e.to_string())?;
+        let entry = *entry;
+        let ptr = catch_unwind(AssertUnwindSafe(|| unsafe { entry() }))
+            .map_err(|_| "panic na função de entrada do plugin".to_owned())?;
+        if ptr.is_null() {
+            return Err("plugin retornou descritor nulo".into());
+        }
+        let plugin = unsafe { &*ptr };
+        if plugin.abi_version != ABI_VERSION {
+            return Err(format!(
+                "ABI {} incompatível; servidor suporta ABI {ABI_VERSION} e {ABI_VERSION_V3}",
+                plugin.abi_version
+            ));
+        }
+        if plugin.name.is_null()
+            || plugin.name_len == 0
+            || plugin.name_len > 128
+            || plugin.create.is_none()
+            || plugin.destroy.is_none()
+            || plugin.register_commands.is_none()
+            || plugin.command.is_none()
+            || plugin.menu_click.is_none()
+        {
+            return Err("descritor ABI v2 incompleto".into());
+        }
+        let state = catch_unwind(AssertUnwindSafe(|| unsafe {
+            plugin.create.expect("validado")()
+        }))
+        .map_err(|_| "panic ao iniciar o plugin".to_owned())?;
+        if state.is_null() {
+            return Err("plugin não conseguiu iniciar".into());
+        }
+        (PluginDescriptor::V2(plugin), state)
+    };
     Ok(LoadedPlugin {
-        descriptor,
-        state,
+        descriptor: descriptor.0,
+        state: descriptor.1,
         disabled: false,
         _library: library,
     })
 }
 
-fn plugin_name(plugin: &PluginV2) -> String {
-    if plugin.name.is_null() || plugin.name_len > 128 {
-        return "<nome inválido>".into();
-    }
-    // SAFETY: descriptor name is static plugin-owned data.
-    let bytes = unsafe { std::slice::from_raw_parts(plugin.name, plugin.name_len) };
-    std::str::from_utf8(bytes)
-        .unwrap_or("<nome inválido>")
-        .to_owned()
+fn plugin_name(plugin: PluginDescriptor) -> String {
+    plugin.name()
 }
 
 pub fn register_commands(root: &Path, host: &mut dyn Host) {
@@ -659,14 +814,25 @@ pub fn register_commands(root: &Path, host: &mut dyn Host) {
         if plugin.disabled {
             continue;
         }
-        let (mut api, mut bridge) = host_api(host, balances);
-        bind_api(&mut api, &mut bridge);
-        // SAFETY: plugin state, descriptor and call-scoped API are valid; C-unwind lets the host catch panics.
-        if catch_unwind(AssertUnwindSafe(|| unsafe {
-            plugin.descriptor.register_commands.expect("validado")(plugin.state, &api)
-        }))
-        .is_err()
-        {
+        let result = match plugin.descriptor {
+            PluginDescriptor::V2(descriptor) => {
+                let (mut api, mut bridge) = host_api(host, balances);
+                bind_api(&mut api, &mut bridge);
+                // SAFETY: callback data is valid for this synchronous invocation.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.register_commands.expect("validado")(plugin.state, &api)
+                }))
+            }
+            PluginDescriptor::V3(descriptor) => {
+                let (mut api, mut bridge) = host_api_v3(host, balances);
+                bind_api_v3(&mut api, &mut bridge);
+                // SAFETY: callback data is valid for this synchronous invocation.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.register_commands.expect("validado")(plugin.state, &api)
+                }))
+            }
+        };
+        if result.is_err() {
             plugin.disabled = true;
             log::error!(
                 "Plugin {} desativado após panic",
@@ -687,19 +853,38 @@ pub fn perform_command(root: &Path, host: &mut dyn Host, player: u128, command: 
         if plugin.disabled {
             continue;
         }
-        let (mut api, mut bridge) = host_api(host, balances);
-        bind_api(&mut api, &mut bridge);
-        // SAFETY: pointers refer to this synchronous call; C-unwind lets the host catch panics.
-        let result = catch_unwind(AssertUnwindSafe(|| unsafe {
-            plugin.descriptor.command.expect("validado")(
-                plugin.state,
-                &api,
-                high,
-                low,
-                command.as_ptr(),
-                command.len(),
-            ) != 0
-        }));
+        let result = match plugin.descriptor {
+            PluginDescriptor::V2(descriptor) => {
+                let (mut api, mut bridge) = host_api(host, balances);
+                bind_api(&mut api, &mut bridge);
+                // SAFETY: pointers refer to this synchronous call.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.command.expect("validado")(
+                        plugin.state,
+                        &api,
+                        high,
+                        low,
+                        command.as_ptr(),
+                        command.len(),
+                    ) != 0
+                }))
+            }
+            PluginDescriptor::V3(descriptor) => {
+                let (mut api, mut bridge) = host_api_v3(host, balances);
+                bind_api_v3(&mut api, &mut bridge);
+                // SAFETY: pointers refer to this synchronous call.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.command.expect("validado")(
+                        plugin.state,
+                        &api,
+                        high,
+                        low,
+                        command.as_ptr(),
+                        command.len(),
+                    ) != 0
+                }))
+            }
+        };
         let Ok(handled) = result else {
             plugin.disabled = true;
             log::error!(
@@ -734,23 +919,43 @@ pub fn menu_click(
         if plugin.disabled {
             continue;
         }
-        let (mut api, mut bridge) = host_api(host, balances);
-        bind_api(&mut api, &mut bridge);
-        // SAFETY: plugin state and call-scoped host API are valid; C-unwind lets the host catch panics.
-        if catch_unwind(AssertUnwindSafe(|| unsafe {
-            plugin.descriptor.menu_click.expect("validado")(
-                plugin.state,
-                &api,
-                high,
-                low,
-                window,
-                slot,
-                button,
-                mode,
-            )
-        }))
-        .is_err()
-        {
+        let result = match plugin.descriptor {
+            PluginDescriptor::V2(descriptor) => {
+                let (mut api, mut bridge) = host_api(host, balances);
+                bind_api(&mut api, &mut bridge);
+                // SAFETY: callback data is valid for this synchronous invocation.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.menu_click.expect("validado")(
+                        plugin.state,
+                        &api,
+                        high,
+                        low,
+                        window,
+                        slot,
+                        button,
+                        mode,
+                    )
+                }))
+            }
+            PluginDescriptor::V3(descriptor) => {
+                let (mut api, mut bridge) = host_api_v3(host, balances);
+                bind_api_v3(&mut api, &mut bridge);
+                // SAFETY: callback data is valid for this synchronous invocation.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    descriptor.menu_click.expect("validado")(
+                        plugin.state,
+                        &api,
+                        high,
+                        low,
+                        window,
+                        slot,
+                        button,
+                        mode,
+                    )
+                }))
+            }
+        };
+        if result.is_err() {
             plugin.disabled = true;
             log::error!(
                 "Plugin {} desativado após panic",
@@ -767,8 +972,6 @@ pub fn dispatch_event(root: &Path, host: &mut dyn Host, event: &Event) -> bool {
     let Loader {
         plugins, balances, ..
     } = &mut *state;
-    let (mut api, mut bridge) = host_api(host, balances);
-    bind_api(&mut api, &mut bridge);
     let (player_high, player_low) = uuid_parts(event.player);
     let c_event = ServerEventV2 {
         kind: event.kind,
@@ -782,25 +985,102 @@ pub fn dispatch_event(root: &Path, host: &mut dyn Host, event: &Event) -> bool {
         position: event.position,
         data_id: event.data_id,
     };
+    let event_json = serde_json::json!({
+        "player": format!("{:032x}", event.player),
+        "name": &event.name,
+        "dimension": &event.dimension,
+        "window_id": event.window_id,
+        "position": event.position,
+        "data_id": event.data_id,
+        "data": &event.payload,
+    })
+    .to_string();
     for plugin in plugins {
         if plugin.disabled {
             continue;
         }
-        if let Some(callback) = plugin.descriptor.event {
-            // SAFETY: event strings and host bridge outlive each synchronous callback.
-            match catch_unwind(AssertUnwindSafe(|| unsafe {
-                callback(plugin.state, &api, &c_event) != 0
-            })) {
-                Ok(was_canceled) => canceled |= was_canceled,
-                Err(_) => {
-                    plugin.disabled = true;
-                    log::error!(
-                        "Plugin {} desativado após panic",
-                        plugin_name(plugin.descriptor)
-                    );
-                }
+        let result = match plugin.descriptor {
+            PluginDescriptor::V2(descriptor) => {
+                let Some(callback) = descriptor.event else {
+                    continue;
+                };
+                let (mut api, mut bridge) = host_api(host, balances);
+                bind_api(&mut api, &mut bridge);
+                // SAFETY: event strings and host bridge outlive this synchronous callback.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    callback(plugin.state, &api, &c_event) != 0
+                }))
+            }
+            PluginDescriptor::V3(descriptor) => {
+                let Some(callback) = descriptor.event else {
+                    continue;
+                };
+                let (mut api, mut bridge) = host_api_v3(host, balances);
+                bind_api_v3(&mut api, &mut bridge);
+                // SAFETY: event JSON and host bridge outlive this synchronous callback.
+                catch_unwind(AssertUnwindSafe(|| unsafe {
+                    callback(
+                        plugin.state,
+                        &api,
+                        event.kind,
+                        event_json.as_ptr(),
+                        event_json.len(),
+                    ) != 0
+                }))
+            }
+        };
+        match result {
+            Ok(was_canceled) => canceled |= was_canceled,
+            Err(_) => {
+                plugin.disabled = true;
+                log::error!(
+                    "Plugin {} desativado após panic",
+                    plugin_name(plugin.descriptor)
+                );
             }
         }
     }
     canceled
+}
+
+/// The first ABI v3 permission provider that returns an explicit decision.
+/// `None` lets Horizon apply the command's configured operator-level default.
+pub fn permission_value(root: &Path, player: u128, node: &str, default_level: u8) -> Option<bool> {
+    let lock = load_once(root);
+    let mut state = lock.lock().unwrap_or_else(|e| e.into_inner());
+    let (high, low) = uuid_parts(player);
+    for plugin in &mut state.plugins {
+        if plugin.disabled {
+            continue;
+        }
+        let PluginDescriptor::V3(descriptor) = plugin.descriptor else {
+            continue;
+        };
+        let Some(callback) = descriptor.permission else {
+            continue;
+        };
+        let result = catch_unwind(AssertUnwindSafe(|| unsafe {
+            callback(
+                plugin.state,
+                high,
+                low,
+                node.as_ptr(),
+                node.len(),
+                default_level,
+            )
+        }));
+        match result {
+            Ok(1) => return Some(true),
+            Ok(-1) => return Some(false),
+            Ok(_) => {}
+            Err(_) => {
+                plugin.disabled = true;
+                log::error!(
+                    "Plugin {} desativado após panic no callback de permissão",
+                    plugin_name(plugin.descriptor)
+                );
+            }
+        }
+    }
+    None
 }

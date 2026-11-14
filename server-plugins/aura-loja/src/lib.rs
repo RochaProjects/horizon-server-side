@@ -1,18 +1,27 @@
 //! Loja em português baseada na lista de itens e no fluxo de telas do AuraEssentials Java.
 
 use horizon_server_plugin_api::{
-    ABI_VERSION, HostApiV2, ItemDeltaV2, MenuItemV2, PluginV2, ServerEventV2,
+    ABI_VERSION_V3, HostApiV3, ItemDeltaV2, PluginV3, event, operation,
     result as transaction_result,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     ffi::c_void,
+    fs,
+    path::PathBuf,
     sync::{Mutex, OnceLock},
 };
 
-const NAME: &[u8] = b"Aura Loja";
-const ITEMS_JSON: &str = include_str!("../shop.json");
+const NAME: &[u8] = b"AuraEssentialsHorizon";
+const DEFAULT_ITEMS_JSON: &str = include_str!("../shop.json");
+const DEFAULT_CONFIG_JSON: &str = r#"{
+  "title": "Loja",
+  "currency": {
+    "normal": "aura:coins",
+    "vip": "aura:credits"
+  }
+}"#;
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,11 +29,40 @@ struct ShopItem {
     display_name: String,
     material: String,
     icon: Option<String>,
+    item_model: Option<String>,
+    components: Option<HashMap<String, serde_json::Value>>,
+    lore: Option<Vec<String>>,
     #[serde(default = "one")]
     amount: u32,
     buy: f64,
     sell: f64,
 }
+
+#[derive(Clone, Deserialize, Serialize)]
+struct ShopConfig {
+    #[serde(default = "default_title")]
+    title: String,
+    #[serde(default)]
+    currency: CurrencyConfig,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct CurrencyConfig {
+    #[serde(default = "default_coins")]
+    normal: String,
+    #[serde(default = "default_credits")]
+    vip: String,
+}
+
+impl Default for CurrencyConfig {
+    fn default() -> Self {
+        Self { normal: default_coins(), vip: default_credits() }
+    }
+}
+
+fn default_title() -> String { "Loja".into() }
+fn default_coins() -> String { "aura:coins".into() }
+fn default_credits() -> String { "aura:credits".into() }
 
 fn one() -> u32 {
     1
@@ -38,10 +76,17 @@ struct Category {
     items: Vec<ShopItem>,
 }
 
-#[derive(Default)]
 struct State {
+    loaded: bool,
+    config: ShopConfig,
     categories: Vec<Category>,
     views: HashMap<(u128, i32), View>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self { loaded: false, config: ShopConfig { title: default_title(), currency: CurrencyConfig::default() }, categories: Vec::new(), views: HashMap::new() }
+    }
 }
 
 #[derive(Clone)]
@@ -64,17 +109,80 @@ enum View {
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
 
 fn state() -> &'static Mutex<State> {
-    STATE.get_or_init(|| {
-        Mutex::new(State {
-            categories: categories(),
-            views: HashMap::new(),
-        })
-    })
+    STATE.get_or_init(|| Mutex::new(State::default()))
 }
 
-fn categories() -> Vec<Category> {
-    let data: HashMap<String, Vec<ShopItem>> = serde_json::from_str(ITEMS_JSON).unwrap_or_default();
-    let meta = [
+fn plugin_dir() -> Option<PathBuf> {
+    std::env::current_dir().ok().map(|root| root.join("plugins").join("AuraEssentialsHorizon"))
+}
+
+fn ensure_default_files() -> Result<PathBuf, String> {
+    let dir = plugin_dir().ok_or_else(|| "não foi possível localizar a pasta do servidor".to_owned())?;
+    fs::create_dir_all(&dir).map_err(|error| format!("não foi possível criar {}: {error}", dir.display()))?;
+    let shop = dir.join("shop.json");
+    if !shop.exists() {
+        fs::write(&shop, format!("{}\n", serde_json::to_string_pretty(
+            &serde_json::from_str::<serde_json::Value>(DEFAULT_ITEMS_JSON).map_err(|error| error.to_string())?
+        ).map_err(|error| error.to_string())?))
+            .map_err(|error| format!("não foi possível criar shop.json: {error}"))?;
+    }
+    let config = dir.join("config.json");
+    if !config.exists() {
+        fs::write(&config, DEFAULT_CONFIG_JSON).map_err(|error| format!("não foi possível criar config.json: {error}"))?;
+    }
+    Ok(dir)
+}
+
+fn load_shop() -> Result<Vec<Category>, String> {
+    let dir = ensure_default_files()?;
+    let bytes = fs::read(dir.join("shop.json")).map_err(|error| format!("não foi possível ler shop.json: {error}"))?;
+    let data: HashMap<String, Vec<ShopItem>> = serde_json::from_slice(&bytes).map_err(|error| format!("shop.json inválido: {error}"))?;
+    let categories = category_meta().into_iter()
+        .map(|(id, title, icon)| Category { id, title, icon, items: data.get(id).cloned().unwrap_or_default() })
+        .collect::<Vec<_>>();
+    if categories.iter().all(|category| category.items.is_empty()) {
+        return Err("shop.json não tem itens em nenhuma categoria".into());
+    }
+    Ok(categories)
+}
+
+fn load_config() -> Result<ShopConfig, String> {
+    let dir = ensure_default_files()?;
+    let bytes = fs::read(dir.join("config.json")).map_err(|error| format!("não foi possível ler config.json: {error}"))?;
+    let config: ShopConfig = serde_json::from_slice(&bytes).map_err(|error| format!("config.json inválido: {error}"))?;
+    for currency in [&config.currency.normal, &config.currency.vip] {
+        if currency.is_empty() || currency.len() > 128 || !currency.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"_:.-".contains(&byte)) {
+            return Err("config.json contém um identificador de moeda inválido".into());
+        }
+    }
+    Ok(config)
+}
+
+fn ensure_loaded(state: &mut State) {
+    if state.loaded { return; }
+    let loaded = load_shop().and_then(|categories| load_config().map(|config| (categories, config)));
+    match loaded {
+        Ok((categories, config)) => { state.categories = categories; state.config = config; }
+        Err(error) => {
+            eprintln!("[AuraEssentialsHorizon] {error}; usando a lista interna inicial");
+            state.categories = categories_from_json(DEFAULT_ITEMS_JSON).unwrap_or_default();
+        }
+    }
+    state.loaded = true;
+}
+
+fn categories_from_json(json: &str) -> Result<Vec<Category>, String> {
+    let data: HashMap<String, Vec<ShopItem>> = serde_json::from_str(json).map_err(|error| error.to_string())?;
+    Ok(category_meta().into_iter().map(|(id, title, icon)| Category {
+        id,
+        title,
+        icon,
+        items: data.get(id).cloned().unwrap_or_default(),
+    }).collect())
+}
+
+fn category_meta() -> [(&'static str, &'static str, &'static str); 8] {
+    [
         ("blocos", "Blocos", "bricks"),
         ("minerios", "Minérios", "diamond"),
         ("drops_mobs", "Drops de Mobs", "blaze_rod"),
@@ -83,18 +191,7 @@ fn categories() -> Vec<Category> {
         ("livros_encantados", "Livros Encantados", "enchanted_book"),
         ("madeiras", "Madeiras", "oak_log"),
         ("loja_vip", "Loja VIP", "nether_star"),
-    ];
-    meta.into_iter()
-        .map(|(id, title, icon)| {
-            let items = data.get(id).cloned().unwrap_or_default();
-            Category {
-                id,
-                title,
-                icon,
-                items,
-            }
-        })
-        .collect()
+    ]
 }
 
 fn bytes(s: &str) -> (*const u8, usize) {
@@ -107,6 +204,7 @@ struct ItemSpec {
     name: String,
     color: String,
     lore: Vec<String>,
+    components: HashMap<String, serde_json::Value>,
     count: u32,
 }
 
@@ -117,6 +215,7 @@ fn spec(slot: usize, item: &str, name: &str, color: &str, count: u32) -> ItemSpe
         name: name.into(),
         color: color.into(),
         lore: Vec::new(),
+        components: HashMap::new(),
         count,
     }
 }
@@ -127,71 +226,77 @@ fn spec_lore(mut item: ItemSpec, lore: Vec<String>) -> ItemSpec {
 }
 
 fn show_menu(
-    host: &HostApiV2,
+    host: &HostApiV3,
     player: u128,
     title: &str,
     rows: u8,
     items: Vec<ItemSpec>,
 ) -> Option<i32> {
-    let open = host.open_menu?;
-    let (high, low) = ((player >> 64) as u64, player as u64);
-    let lore_text: Vec<_> = items.iter().map(|it| it.lore.join("\n")).collect();
-    let descriptors: Vec<_> = items
+    let menu_items: Vec<_> = items
         .iter()
-        .zip(&lore_text)
-        .map(|(it, lore_text)| {
-            let (item, item_len) = bytes(&it.item);
-            let (name, name_len) = bytes(&it.name);
-            let (color, color_len) = bytes(&it.color);
-            let (lore, lore_len) = bytes(lore_text);
-            MenuItemV2 {
-                slot: it.slot as u32,
-                item,
-                item_len,
-                name,
-                name_len,
-                color,
-                color_len,
-                lore,
-                lore_len,
-                count: it.count,
-            }
+        .map(|item| {
+            serde_json::json!({
+                "slot": item.slot,
+                "item": item.item,
+                "count": item.count,
+                "name": {"text": item.name, "color": item.color, "italic": false},
+                "lore": item.lore,
+                "components": item.components,
+            })
         })
         .collect();
-    let (title_ptr, title_len) = bytes(title);
-    // SAFETY: all slices and descriptor pointers stay alive for this synchronous host call.
-    let window = unsafe {
-        open(
+    let result = call_json(
+        host,
+        player,
+        serde_json::json!({
+            "operation": operation::MENU_OPEN,
+            "data": {"title": title, "rows": rows, "items": menu_items},
+        }),
+    )?;
+    result.get("window_id")?.as_i64().and_then(|id| i32::try_from(id).ok())
+}
+
+fn call_json(host: &HostApiV3, player: u128, request: serde_json::Value) -> Option<serde_json::Value> {
+    let callback = host.call_json?;
+    let input = request.to_string();
+    let (high, low) = ((player >> 64) as u64, player as u64);
+    let mut output = vec![0_u8; 65_536];
+    let mut output_len = 0_usize;
+    // SAFETY: input/output buffers remain valid for the synchronous callback.
+    let status = unsafe {
+        callback(
             host.context,
             high,
             low,
-            title_ptr,
-            title_len,
-            rows,
-            descriptors.as_ptr(),
-            descriptors.len(),
+            input.as_ptr(),
+            input.len(),
+            output.as_mut_ptr(),
+            output.len(),
+            &mut output_len,
         )
     };
-    (window >= 0).then_some(window)
+    (status == transaction_result::OK && output_len <= output.len())
+        .then(|| serde_json::from_slice(&output[..output_len]).ok())
+        .flatten()
 }
 
-fn message(host: &HostApiV2, player: u128, text: &str) {
-    if let Some(send) = host.send_message {
+fn message(host: &HostApiV3, player: u128, text: &str) {
+    if let Some(send) = host.common.send_message {
         let (high, low) = ((player >> 64) as u64, player as u64);
         // SAFETY: text remains valid for this synchronous call.
-        unsafe { send(host.context, high, low, text.as_ptr(), text.len()) };
+        unsafe { send(host.common.context, high, low, text.as_ptr(), text.len()) };
     }
 }
 
 fn transact_shop_item(
-    host: &HostApiV2,
+    host: &HostApiV3,
     player: u128,
     item: &ShopItem,
     currency: &str,
     quantity: u32,
     buying: bool,
 ) -> i32 {
-    let Some(transact) = host.transact else {
+    let Some(transact) = host.common.transact else {
         return transaction_result::STORAGE_ERROR;
     };
     let units = if buying { item.buy } else { item.sell };
@@ -227,7 +332,7 @@ fn transact_shop_item(
     // SAFETY: the API pointers and item id remain alive for this synchronous host call.
     unsafe {
         transact(
-            host.context,
+            host.common.context,
             high,
             low,
             currency_ptr,
@@ -239,7 +344,7 @@ fn transact_shop_item(
     }
 }
 
-fn trade_message(host: &HostApiV2, player: u128, result: i32, buying: bool) {
+fn trade_message(host: &HostApiV3, player: u128, result: i32, buying: bool) {
     let text = match result {
         transaction_result::OK if buying => "Compra concluída.",
         transaction_result::OK => "Venda concluída.",
@@ -256,15 +361,15 @@ fn trade_message(host: &HostApiV2, player: u128, result: i32, buying: bool) {
     message(host, player, text);
 }
 
-fn balance_text(host: &HostApiV2, player: u128, currency: &str) -> Option<String> {
-    let get = host.get_balance?;
+fn balance_text(host: &HostApiV3, player: u128, currency: &str) -> Option<String> {
+    let get = host.common.get_balance?;
     let (currency_ptr, currency_len) = bytes(currency);
     let (high, low) = ((player >> 64) as u64, player as u64);
     let mut balance = 0_i64;
     // SAFETY: output and currency bytes live through this synchronous host call.
     let result = unsafe {
         get(
-            host.context,
+            host.common.context,
             high,
             low,
             currency_ptr,
@@ -289,7 +394,8 @@ fn price_units(units: i64) -> String {
     }
 }
 
-fn open_categories(state: &mut State, host: &HostApiV2, player: u128) {
+fn open_categories(state: &mut State, host: &HostApiV3, player: u128) {
+    ensure_loaded(state);
     let mut mapping = HashMap::new();
     let items = state
         .categories
@@ -317,7 +423,7 @@ fn open_categories(state: &mut State, host: &HostApiV2, player: u128) {
         })
         .collect();
     state.views.retain(|(uuid, _), _| *uuid != player);
-    if let Some(window) = show_menu(host, player, "Loja", 3, items) {
+    if let Some(window) = show_menu(host, player, &state.config.title, 3, items) {
         state
             .views
             .insert((player, window), View::Categories(mapping));
@@ -328,7 +434,7 @@ fn open_categories(state: &mut State, host: &HostApiV2, player: u128) {
 
 fn open_items(
     state: &mut State,
-    host: &HostApiV2,
+    host: &HostApiV3,
     player: u128,
     category: usize,
     requested_page: usize,
@@ -385,6 +491,17 @@ fn open_items(
             item_color,
             item.amount.clamp(1, 64),
         );
+        let mut product = product;
+        if let Some(model) = &item.item_model {
+            product.components.insert(
+                "minecraft:item_model".into(),
+                serde_json::Value::String(model.clone()),
+            );
+        }
+        if let Some(components) = &item.components {
+            product.components.extend(components.clone());
+        }
+        let lore = item.lore.clone().unwrap_or(lore);
         items.push(spec_lore(product, lore));
     }
     items.push(spec(
@@ -433,7 +550,7 @@ fn open_items(
 
 fn open_detail(
     state: &mut State,
-    host: &HostApiV2,
+    host: &HostApiV3,
     player: u128,
     category: usize,
     page: usize,
@@ -455,9 +572,9 @@ fn open_detail(
         "moedas"
     };
     let currency_id = if state.categories[category].id == "loja_vip" {
-        "aura:credits"
+        state.config.currency.vip.as_str()
     } else {
-        "aura:coins"
+        state.config.currency.normal.as_str()
     };
     let mut quantity_lore = vec![
         format!(
@@ -479,15 +596,25 @@ fn open_detail(
         format!("§aClique para comprar {quantity}x"),
         format!("§cClique para vender {quantity}x"),
     ]);
+    let mut product_icon = spec(
+        4,
+        &format!("minecraft:{material}"),
+        &item.display_name,
+        "yellow",
+        item.amount.clamp(1, 64),
+    );
+    if let Some(model) = &item.item_model {
+        product_icon.components.insert(
+            "minecraft:item_model".into(),
+            serde_json::Value::String(model.clone()),
+        );
+    }
+    if let Some(components) = &item.components {
+        product_icon.components.extend(components.clone());
+    }
     let mut items = vec![
         spec(0, "minecraft:gray_stained_glass_pane", " ", "dark_gray", 1),
-        spec(
-            4,
-            &format!("minecraft:{material}"),
-            &item.display_name,
-            "yellow",
-            item.amount.clamp(1, 64),
-        ),
+        product_icon,
         spec(10, "minecraft:red_stained_glass_pane", "−64", "red", 1),
         spec(11, "minecraft:orange_stained_glass_pane", "−16", "gold", 1),
         spec(
@@ -562,6 +689,8 @@ fn price(value: f64) -> String {
 }
 
 unsafe extern "C-unwind" fn create() -> *mut c_void {
+    let mut plugin_state = state().lock().unwrap_or_else(|error| error.into_inner());
+    ensure_loaded(&mut plugin_state);
     Box::into_raw(Box::new(())) as *mut c_void
 }
 unsafe extern "C-unwind" fn destroy(state: *mut c_void) {
@@ -570,20 +699,28 @@ unsafe extern "C-unwind" fn destroy(state: *mut c_void) {
     }
 }
 
-unsafe extern "C-unwind" fn register_commands(_: *mut c_void, host: *const HostApiV2) {
+unsafe extern "C-unwind" fn register_commands(_: *mut c_void, host: *const HostApiV3) {
     if host.is_null() {
         return;
     }
     let host = unsafe { &*host };
-    if let Some(register) = host.register_command {
-        let usage = b"loja";
-        unsafe { register(host.context, usage.as_ptr(), usage.len()) };
-    }
+    let _ = call_json(host, 0, serde_json::json!({
+        "operation": operation::COMMAND_REGISTER,
+        "data": {"usage": "loja", "default_level": 0},
+    }));
+    let _ = call_json(host, 0, serde_json::json!({
+        "operation": operation::COMMAND_REGISTER,
+        "data": {
+            "usage": "loja recarregar",
+            "default_level": 2,
+            "permission": "auraessentials.loja.admin",
+        },
+    }));
 }
 
 unsafe extern "C-unwind" fn command(
     _: *mut c_void,
-    host: *const HostApiV2,
+    host: *const HostApiV3,
     high: u64,
     low: u64,
     line: *const u8,
@@ -593,22 +730,38 @@ unsafe extern "C-unwind" fn command(
         return 0;
     }
     let line = unsafe { std::slice::from_raw_parts(line, len) };
-    if std::str::from_utf8(line)
-        .ok()
-        .is_none_or(|s| !matches!(s.trim(), "loja" | "/loja"))
-    {
+    let Ok(line) = std::str::from_utf8(line) else { return 0 };
+    let line = line.trim().trim_start_matches('/');
+    if !matches!(line, "loja" | "loja recarregar") {
         return 0;
     }
     let host = unsafe { &*host };
     let player = (u128::from(high) << 64) | u128::from(low);
     let mut state = state().lock().unwrap_or_else(|e| e.into_inner());
-    open_categories(&mut state, host, player);
+    if line == "loja recarregar" {
+        // Permission is enforced by Horizon's registered operator-level command.
+        match (load_shop(), load_config()) {
+            (Ok(categories), Ok(config)) => {
+                state.categories = categories;
+                state.config = config;
+                state.loaded = true;
+                state.views.clear();
+                message(host, player, "Configuração e itens da loja recarregados.");
+            }
+            (Err(error), _) | (_, Err(error)) => {
+                message(host, player, &format!("Não foi possível recarregar a loja: {error}"));
+            }
+        }
+    } else {
+        ensure_loaded(&mut state);
+        open_categories(&mut state, host, player);
+    }
     1
 }
 
 unsafe extern "C-unwind" fn menu_click(
     _: *mut c_void,
-    host: *const HostApiV2,
+    host: *const HostApiV3,
     high: u64,
     low: u64,
     window: i32,
@@ -647,8 +800,8 @@ unsafe extern "C-unwind" fn menu_click(
             } else if let Some(item) = slots.get(&slot).copied() {
                 if state.categories[category].id == "loja_vip" {
                     let product = state.categories[category].items[item].clone();
-                    let result =
-                        transact_shop_item(host, player, &product, "aura:credits", 1, true);
+                    let currency = state.config.currency.vip.clone();
+                    let result = transact_shop_item(host, player, &product, &currency, 1, true);
                     trade_message(host, player, result, true);
                     open_items(&mut state, host, player, category, page);
                 } else {
@@ -678,11 +831,11 @@ unsafe extern "C-unwind" fn menu_click(
             20 => {
                 let product = state.categories[category].items[item].clone();
                 let currency = if state.categories[category].id == "loja_vip" {
-                    "aura:credits"
+                    state.config.currency.vip.clone()
                 } else {
-                    "aura:coins"
+                    state.config.currency.normal.clone()
                 };
-                let result = transact_shop_item(host, player, &product, currency, quantity, true);
+                let result = transact_shop_item(host, player, &product, &currency, quantity, true);
                 trade_message(host, player, result, true);
                 state.views.insert(
                     (player, window),
@@ -697,11 +850,11 @@ unsafe extern "C-unwind" fn menu_click(
             24 => {
                 let product = state.categories[category].items[item].clone();
                 let currency = if state.categories[category].id == "loja_vip" {
-                    "aura:credits"
+                    state.config.currency.vip.clone()
                 } else {
-                    "aura:coins"
+                    state.config.currency.normal.clone()
                 };
-                let result = transact_shop_item(host, player, &product, currency, quantity, false);
+                let result = transact_shop_item(host, player, &product, &currency, quantity, false);
                 trade_message(host, player, result, false);
                 state.views.insert(
                     (player, window),
@@ -730,29 +883,44 @@ unsafe extern "C-unwind" fn menu_click(
 
 unsafe extern "C-unwind" fn event(
     _: *mut c_void,
-    _: *const HostApiV2,
-    event: *const ServerEventV2,
+    _: *const HostApiV3,
+    kind: u32,
+    payload: *const u8,
+    payload_len: usize,
 ) -> u8 {
-    if event.is_null() {
+    if payload.is_null() || payload_len > 65_536 {
         return 0;
     }
-    let event = unsafe { &*event };
-    let player = (u128::from(event.player_high) << 64) | u128::from(event.player_low);
+    let payload = unsafe { std::slice::from_raw_parts(payload, payload_len) };
+    let Ok(payload) = serde_json::from_slice::<serde_json::Value>(payload) else {
+        return 0;
+    };
+    let player = payload
+        .get("player")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|uuid| u128::from_str_radix(uuid, 16).ok())
+        .unwrap_or(0);
     let mut state = state().lock().unwrap_or_else(|e| e.into_inner());
-    match event.kind {
-        horizon_server_plugin_api::event::PLAYER_QUIT => {
+    match kind {
+        event::PLAYER_QUIT => {
             state.views.retain(|(uuid, _), _| *uuid != player);
         }
-        horizon_server_plugin_api::event::MENU_CLOSED => {
-            state.views.remove(&(player, event.window_id));
+        event::MENU_CLOSED => {
+            if let Some(window) = payload
+                .get("window_id")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|window| i32::try_from(window).ok())
+            {
+                state.views.remove(&(player, window));
+            }
         }
         _ => {}
     }
     0
 }
 
-static DESCRIPTOR: PluginV2 = PluginV2 {
-    abi_version: ABI_VERSION,
+static DESCRIPTOR: PluginV3 = PluginV3 {
+    abi_version: ABI_VERSION_V3,
     name: NAME.as_ptr(),
     name_len: NAME.len(),
     create: Some(create),
@@ -761,9 +929,10 @@ static DESCRIPTOR: PluginV2 = PluginV2 {
     command: Some(command),
     menu_click: Some(menu_click),
     event: Some(event),
+    permission: None,
 };
 
 #[unsafe(no_mangle)]
-pub extern "C-unwind" fn horizon_server_plugin_v2() -> *const PluginV2 {
+pub extern "C-unwind" fn horizon_server_plugin_v3() -> *const PluginV3 {
     &DESCRIPTOR
 }

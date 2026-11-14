@@ -4540,6 +4540,7 @@ impl Game<'_> {
         to: &str,
     ) {
         mod_api::dispatch_player_changed_dimension(self, mod_api::mods(), player, name, from, to);
+        super::server_plugins::player_changed_dimension(self, player, name, from, to);
     }
     /// A player's client started (`flying`) or stopped flying (vanilla's
     /// `handlePlayerAbilities`, which honours it only for a player who may
@@ -4734,6 +4735,7 @@ impl Game<'_> {
             to,
             dimension,
         );
+        super::server_plugins::player_teleported(self, player, name, from, to, dimension);
     }
     /// A player whose login the server has accepted (NeoForge's
     /// `PlayerNegotiationEvent` stage): the name, whitelist, ban and
@@ -6668,6 +6670,9 @@ impl Game<'_> {
             attacker,
             cancel,
         );
+        if kind == "minecraft:player" {
+            *cancel |= super::server_plugins::player_death(self, entity, damage_type, attacker);
+        }
     }
 
     /// A mob is about to convert into another type (NeoForge's
@@ -7260,6 +7265,9 @@ impl Game<'_> {
             default_level,
             result,
         );
+        if result.is_none() {
+            *result = super::server_plugins::permission_value(self, player, node, default_level);
+        }
     }
     /// The permission groups a player belongs to (LuckPerms' groups, the ranks a permissions
     /// mod keeps), as the mods name them: each mod adds names to `groups` in turn, sharing the
@@ -7762,6 +7770,7 @@ impl Game<'_> {
             pack,
             status,
         );
+        super::server_plugins::resource_pack_status(self, player, name, pack, status);
     }
     /// A mob's target changed (NeoForge's `LivingChangeTargetEvent`, Bukkit's
     /// `EntityTargetEvent`, vanilla's `Mob.setTarget`): mob `entity` of type
@@ -8460,6 +8469,7 @@ impl Game<'_> {
         state: BlockStateId,
     ) {
         mod_api::dispatch_place_block(self, mod_api::mods(), stack, pos, state);
+        super::server_plugins::block_place(self, pos, state.0);
     }
     /// A player right clicks the block at `pos` with `self.hand`, `face` the
     /// face clicked: where `ServerPlayerGameMode.useItemOn` starts, before

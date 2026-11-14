@@ -49,24 +49,17 @@ jobs:
             ${{ runner.os }}-rust-1.99-
           save-always: true
 
-      - name: Build vanilla server engine with runtime plugin host
+      - name: Build server engine, server supervisor, and resource preparer
         run: |
           set -euo pipefail
           cargo build --locked --release -p horizon-client --no-default-features --features server-plugins --bin horizon-client
-
-      - name: Build the separate Portuguese shop plugin and server tools
-        run: |
-          set -euo pipefail
-          cargo build --locked --release -p horizon-plugin-aura-loja -p horizon-server -p horizon-prepare
-          mkdir -p dist/auraessentials-server/plugins
+          cargo build --locked --release -p horizon-server -p horizon-prepare
           cp target/release/horizon-server dist/auraessentials-server/
           cp target/release/horizon-prepare dist/auraessentials-server/
           cp target/release/horizon-client dist/auraessentials-server/horizon-engine
-          cp target/release/libhorizon_plugin_aura_loja.so dist/auraessentials-server/plugins/
           cp research-lock.json LICENSE dist/auraessentials-server/
           chmod +x dist/auraessentials-server/horizon-server dist/auraessentials-server/horizon-prepare dist/auraessentials-server/horizon-engine
-          test -f dist/auraessentials-server/plugins/libhorizon_plugin_aura_loja.so
-          printf '{"engine":"vanilla-horizon","plugin":"aura-loja","plugin_abi":2,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/auraessentials-release.json
+          printf '{"engine":"vanilla-horizon","plugin_abi":3,"horizon":"%s","minecraft":"26.3"}\n' "$HORIZON_REVISION" > dist/auraessentials-server/auraessentials-release.json
           tar -czf dist/aura-essentials-server-linux-x86_64.tar.gz -C dist auraessentials-server
           sha256sum dist/aura-essentials-server-linux-x86_64.tar.gz > dist/aura-essentials-server-linux-x86_64.tar.gz.sha256
 
@@ -81,6 +74,6 @@ jobs:
           gh release create "$tag" \
             --repo "$GITHUB_REPOSITORY" \
             --title "AuraEssentials ${tag#aura-v}" \
-            --notes "Servidor Horizon 26.3 vanilla com host de plugins C ABI v2 e o plugin Aura Loja em biblioteca .so separada. Linux x86_64; inclui horizon-server, horizon-engine, horizon-prepare e plugins/libhorizon_plugin_aura_loja.so. Compras e vendas usam saldos persistidos em plugins/balances.json." \
+            --notes "Servidor Horizon 26.3 vanilla com host de plugins C ABI v3. Linux x86_64; inclui horizon-server, horizon-engine e horizon-prepare. O pacote não compila nem inclui plugins: instale separadamente a biblioteca .so do plugin desejado em plugins/." \
             dist/aura-essentials-server-linux-x86_64.tar.gz \
             dist/aura-essentials-server-linux-x86_64.tar.gz.sha256

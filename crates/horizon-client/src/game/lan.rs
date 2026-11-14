@@ -2095,6 +2095,7 @@ impl Game<'_> {
                 } => self.chat_filtered(&mut host, sender, &name, place, &text, count, action),
                 HostEvent::PlayerChat { sender, text } => {
                     if let Some(g) = host.hub.guests.iter().find(|g| g.uuid == sender) {
+                        super::server_plugins::player_chat(self, sender, &g.name, &text);
                         if self.options.dedicated.is_some() {
                             super::dedicated::events::record(
                                 "chat",
