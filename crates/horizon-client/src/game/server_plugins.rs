@@ -1,9 +1,11 @@
 //! Runtime server plugins are a separate layer: only the narrow C ABI loader
 //! is linked here, while plugin logic stays in independently built libraries.
 
+#[cfg(feature = "server-plugins")]
+use super::native_server::NativeSidebar;
 use super::{
     Game,
-    native_server::{NativeCommand, NativeServerPlayer, NativeSidebar},
+    native_server::{NativeCommand, NativeServerPlayer},
 };
 #[cfg(feature = "server-plugins")]
 use horizon_client::{
